@@ -1,0 +1,16 @@
+<main>
+  <.flash_group flash={@flash} />
+  <div class="">
+    <.header>
+      Core Components Demo
+      <:subtitle>
+        Explore the core components of the Phoenix Starter Kit.
+      </:subtitle>
+    </.header>
+    <.tabs
+      current_path={@request_uri.path}
+      tabs={[%{name: "Overview", path: "/demo/components"}, %{name: "Forms", path: "/demo/demo_records"}]}
+    />
+    {@inner_content}
+  </div>
+</main>

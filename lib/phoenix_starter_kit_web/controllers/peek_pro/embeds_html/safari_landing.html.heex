@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link phx-track-static rel="stylesheet" href={~p"/assets/css/app.css"} />
+    <title>Activating...</title>
+    <script>
+      // Safari iframe detection and handling
+      (function() {
+        // Check if we're in an iframe
+        const isInIframe = window !== window.top;
+
+        if (isInIframe) {
+          // We're in Safari inside an iframe - show unsupported message
+          console.log('unsupported browser');
+          document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('safari-iframe-message').style.display = 'block';
+            document.getElementById('loading-message').style.display = 'none';
+          });
+        } else {
+          // We're in Safari but NOT in an iframe - proceed with normal flow
+          document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('proceed-form').submit();
+          });
+        }
+      })();
+
+      // Handle button click - shift+click tries anyway in iframe
+      function handleButtonClick(event) {
+        if (event.shiftKey) {
+          // Shift+click: try anyway in current iframe
+          event.preventDefault();
+          document.getElementById('try-anyway-form').submit();
+        }
+        // Normal click: let the form submit to new tab (default behavior)
+      }
+    </script>
+  </head>
+  <body class="bg-white">
+    <div class="flex flex-col items-center justify-center h-screen">
+      <!-- Loading message (shown by default, hidden if in iframe) -->
+      <div id="loading-message" class="flex items-center space-x-2 mb-4">
+        <!-- Tailwind spinner animation -->
+        <svg class="animate-spin h-8 w-8 text-brand" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path
+            class="opacity-75"
+            fill="currentColor"
+            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+          >
+          </path>
+        </svg>
+        <span class="text-lg font-medium text-gray-700">Activating...</span>
+      </div>
+      
+<!-- Safari iframe unsupported message (hidden by default) -->
+      <div id="safari-iframe-message" class="text-center max-w-md px-6" style="display: none;">
+        <div class="mb-6">
+          <svg class="mx-auto h-16 w-16 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 18.5c-.77.833.192 2.5 1.732 2.5z"
+            />
+          </svg>
+        </div>
+        <h2 class="text-xl font-semibold text-gray-900 mb-4">We Love Safari, But…</h2>
+        <p class="text-gray-600 mb-6">
+          Unfortunately, Safari doesn't support this feature when it's embedded inside PeekPro.
+          To keep things running smoothly, please open this page in a new tab using the button below. You can also switch to Chrome or Firefox for full compatibility.
+        </p>
+        <form id="new-tab-form" method="post" action="/peek-pro/settings" target="_blank" style="display: inline;">
+          <input type="hidden" name="_csrf_token" value={get_csrf_token()} />
+          <input type="hidden" name="peek-auth" value={@peek_auth_token} />
+          <input type="hidden" name="force_proceed" value="true" />
+          <button
+            type="submit"
+            class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md mb-4 transition-colors"
+            onclick="handleButtonClick(event)"
+          >
+            Open in New Tab
+          </button>
+        </form>
+        
+<!-- Hidden form for "try anyway" in current iframe -->
+        <form id="try-anyway-form" method="post" action="/peek-pro/settings" style="display: none;">
+          <input type="hidden" name="_csrf_token" value={get_csrf_token()} />
+          <input type="hidden" name="peek-auth" value={@peek_auth_token} />
+          <input type="hidden" name="force_proceed" value="true" />
+        </form>
+      </div>
+    </div>
+    
+<!-- Hidden form to proceed with normal flow when not in iframe -->
+    <form id="proceed-form" method="post" action="/peek-pro/settings" style="display: none;">
+      <input type="hidden" name="_csrf_token" value={get_csrf_token()} />
+      <input type="hidden" name="peek-auth" value={@peek_auth_token} />
+      <input type="hidden" name="force_proceed" value="true" />
+    </form>
+  </body>
+</html>

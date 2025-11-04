@@ -1,0 +1,3 @@
+#!/bin/bash
+fly proxy 15432:5432 -a phoenix-starter-kit-db
+

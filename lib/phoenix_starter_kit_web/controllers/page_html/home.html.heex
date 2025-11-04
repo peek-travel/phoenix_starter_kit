@@ -1,0 +1,21 @@
+<Layouts.flash_group flash={@flash} />
+<div class="flex flex-col sm:flex-row min-h-screen">
+  <div class="flex-1 flex items-center justify-center bg-brand/10 px-4">
+    <div class="w-full max-w-md mx-auto text-center">
+      <h1 class="font-medium leading-8 text-zinc-800 text-2xl">
+        Phoenix Starter Kit
+      </h1>
+      <div class="py-4">
+        <.divider />
+      </div>
+      <div class="mt-6">
+        <.link
+          href={Application.fetch_env!(:phoenix_starter_kit, :embedded_app_url)}
+          class="rounded-md py-2 px-3 font-medium text-sm leading-6 bg-brand hover:bg-brand-secondary text-white active:text-white/80"
+        >
+          Install App
+        </.link>
+      </div>
+    </div>
+  </div>
+</div>

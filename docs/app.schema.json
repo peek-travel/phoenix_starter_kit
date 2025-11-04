@@ -1,0 +1,447 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://peek.com/schemas/app-registry/app.json",
+  "title": "Peek App Registry Application Schema",
+  "description": "JSON Schema for app.json files used in the Peek App Registry system",
+  "type": "object",
+  "required": [
+    "data"
+  ],
+  "properties": {
+    "data": {
+      "type": "object",
+      "required": [
+        "app"
+      ],
+      "properties": {
+        "app": {
+          "type": "object",
+          "required": [
+            "id",
+            "name",
+            "app_version"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "The public ID of the app (used for identification)",
+              "pattern": "^[a-z0-9-]+$",
+              "maxLength": 50
+            },
+            "name": {
+              "type": "string",
+              "description": "The name of the app"
+            },
+            "shared_secret_key": {
+              "type": "string",
+              "description": "Shared secret key for app authentication (only included for newly created apps)"
+            },
+            "app_version": {
+              "type": "object",
+              "required": [
+                "extendables",
+                "display_version",
+                "description",
+                "status"
+              ],
+              "properties": {
+                "extendables": {
+                  "type": "array",
+                  "description": "List of configured extendables for this app version",
+                  "items": {
+                    "$ref": "#/$defs/extendable"
+                  }
+                },
+                "app_url": {
+                  "type": "string",
+                  "description": "Generated URL for installing the app"
+                },
+                "helpdesk_url": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "URL for app support/helpdesk"
+                },
+                "terms_url": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "URL for app terms of service"
+                },
+                "privacy_url": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "URL for app privacy policy"
+                },
+                "screenshots": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "description": "Array of screenshot URLs",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "base_url": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Base URL for the app (used for relative URL resolution)"
+                },
+                "icon_url": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "URL for the app icon"
+                },
+                "categories": {
+                  "type": "array",
+                  "description": "List of category names this app belongs to",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "display_version": {
+                  "type": "string",
+                  "description": "Human-readable version string (e.g., '1.0.0')"
+                },
+                "description": {
+                  "type": "string",
+                  "description": "Description of the app"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "draft",
+                    "publishing_requested",
+                    "in_review",
+                    "approved",
+                    "published"
+                  ],
+                  "description": "Current status of the app version"
+                },
+                "visibility": {
+                  "type": "string",
+                  "enum": [
+                    "public",
+                    "beta",
+                    "unlisted"
+                  ],
+                  "description": "Visibility level of the app"
+                },
+                "build_number": {
+                  "type": "integer",
+                  "description": "Internal build number"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "extendable": {
+      "type": "object",
+      "required": [
+        "slug",
+        "configuration"
+      ],
+      "properties": {
+        "slug": {
+          "type": "string",
+          "enum": [
+            "app_registry_main_url@v1",
+            "app_registry_settings_url@v1",
+            "app_registry_webhook@v1",
+            "broadcast_to_url@v1",
+            "route_show@v1",
+            "spinnaker_ember_extension@v1",
+            "sunflower_ember_extension@v1",
+            "webhook_on_booking_canceled@v1",
+            "webhook_on_booking_created@v1",
+            "webhook_on_booking_updated@v1"
+          ],
+          "description": "The slug identifying the extendable type"
+        },
+        "configuration": {
+          "type": "object",
+          "description": "Configuration object for the extendable. The structure depends on the extendable type (slug).",
+          "additionalProperties": true
+        }
+      }
+    },
+    "app_registry_main_url_config": {
+      "type": "object",
+      "required": [
+        "url"
+      ],
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "The URL to load when the app is installed"
+        },
+        "url_mode": {
+          "type": "string",
+          "enum": [
+            "prepend_base_url",
+            "preserve_relative_url"
+          ],
+          "default": "prepend_base_url",
+          "description": "How to handle the URL. 'prepend_base_url' prepends the base URL to relative URLs, 'preserve_relative_url' keeps the URL as is"
+        }
+      }
+    },
+    "app_registry_settings_url_config": {
+      "type": "object",
+      "required": [
+        "url"
+      ],
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "The URL to load for app settings"
+        },
+        "url_mode": {
+          "type": "string",
+          "enum": [
+            "prepend_base_url",
+            "preserve_relative_url"
+          ],
+          "default": "prepend_base_url",
+          "description": "How to handle the URL. 'prepend_base_url' prepends the base URL to relative URLs, 'preserve_relative_url' keeps the URL as is"
+        }
+      }
+    },
+    "app_registry_webhook_config": {
+      "type": "object",
+      "required": [
+        "url"
+      ],
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "The URL to receive notifications whenever an app is installed/uninstalled"
+        }
+      }
+    },
+    "broadcast_to_url_config": {
+      "type": "object",
+      "required": [
+        "url",
+        "events"
+      ],
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "The URL to send the event to. Use __dynamic__ to set it later."
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "booking_created",
+              "booking_updated",
+              "booking_canceled"
+            ]
+          },
+          "description": "The events to send"
+        },
+        "output_format": {
+          "type": "string",
+          "enum": [
+            "gql",
+            "booking_webhook_data",
+            "booking_id"
+          ],
+          "default": "booking_id",
+          "description": "The format of the output data"
+        },
+        "output_fields_gql_query": {
+          "type": "string",
+          "description": "The GraphQL query to get specific fields (required when output_format is 'gql')"
+        },
+        "timeout": {
+          "type": "integer",
+          "default": 60000,
+          "description": "The timeout in milliseconds"
+        }
+      }
+    },
+    "route_show_config": {
+      "type": "object",
+      "required": [
+        "link_text",
+        "link_at"
+      ],
+      "properties": {
+        "link_text": {
+          "type": "string",
+          "description": "The text to render in the link"
+        },
+        "link_at": {
+          "type": "string",
+          "enum": [
+            "sidebar_dashboard"
+          ],
+          "description": "Where in the application the link should be shown"
+        },
+        "title": {
+          "type": "string",
+          "description": "The title to show in the page"
+        },
+        "iframe_url": {
+          "type": "string",
+          "description": "The iframe URL to show. Provide either an iframe_url or an internal_hook_slug"
+        },
+        "internal_hook_slug": {
+          "type": "string",
+          "enum": [
+            "timeslots_overview",
+            "square_item_option_max_quantity_sync"
+          ],
+          "description": "Internal hook slug to render existing hooks that implement the route_show"
+        }
+      }
+    },
+    "ember_extension_config": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "html",
+            "generic"
+          ],
+          "description": "The type of ember extension"
+        },
+        "client_secret_token": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Optional secret token for JWT authentication"
+        },
+        "client_secret_ttl_sec": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Time-to-live for the JWT token in seconds"
+        },
+        "html_data": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "HTML data configuration (when type is 'html')",
+          "properties": {
+            "html": {
+              "type": "string",
+              "description": "HTML content to inject"
+            },
+            "target_selector": {
+              "type": "string",
+              "description": "CSS selector for where to inject the HTML"
+            },
+            "is_global_scope": {
+              "type": "boolean",
+              "default": false,
+              "description": "Whether the HTML should be injected globally"
+            },
+            "dependencies": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ember_dependency"
+              },
+              "description": "Additional dependencies"
+            },
+            "main_dependency": {
+              "$ref": "#/$defs/ember_dependency",
+              "description": "Main dependency"
+            }
+          }
+        },
+        "generic_data": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "Generic data configuration (when type is 'generic')",
+          "properties": {
+            "run_on_selector": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "CSS selector for when to run the script"
+            },
+            "main_dependency": {
+              "$ref": "#/$defs/ember_dependency",
+              "description": "Main dependency"
+            }
+          }
+        }
+      }
+    },
+    "ember_dependency": {
+      "type": "object",
+      "required": [
+        "url",
+        "name",
+        "type"
+      ],
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "URL of the dependency"
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the dependency"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "dependency",
+            "generic"
+          ],
+          "description": "Type of dependency"
+        },
+        "is_main_script": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether this is the main script"
+        },
+        "script_config": {
+          "type": "object",
+          "default": {},
+          "description": "Configuration for the script"
+        }
+      }
+    },
+    "webhook_simple_config": {
+      "type": "object",
+      "required": [
+        "url"
+      ],
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "The URL to send webhook events to"
+        }
+      }
+    }
+  }
+}

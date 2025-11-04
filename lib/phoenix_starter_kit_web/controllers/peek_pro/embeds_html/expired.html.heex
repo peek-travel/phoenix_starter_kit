@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link phx-track-static rel="stylesheet" href={~p"/assets/css/app.css"} />
+    <title>Session Expired</title>
+    <script>
+      // Reload the parent window after a short delay
+      setTimeout(function() {
+        window.top.location.reload();
+      }, 1000);
+    </script>
+  </head>
+  <body class="bg-white">
+    <div class="flex flex-col items-center justify-center h-screen">
+      <div class="text-center max-w-md mx-auto p-4">
+        <div class="mb-4 text-yellow-500">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+            />
+          </svg>
+        </div>
+        <h2 class="text-xl font-semibold text-gray-800 mb-2">Session Expired</h2>
+        <p class="text-gray-600 mb-4">
+          The token has expired. Please reload the page and try again.
+        </p>
+      </div>
+    </div>
+  </body>
+</html>

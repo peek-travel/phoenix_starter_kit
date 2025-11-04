@@ -1,0 +1,181 @@
+#!/bin/bash
+
+set -e
+
+DEBUG=false
+AUTO_PUBLISH=true
+JSON_FILE=""
+
+# Function to print error and exit
+error_exit() {
+  echo "❌ Error: $1" >&2
+  exit 1
+}
+
+# Function to log debug info
+log_debug() {
+  if [ "$DEBUG" = true ]; then
+    echo "🔍 $1"
+  fi
+}
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --debug)
+      DEBUG=true
+      shift
+      ;;
+    --publish)
+      if [[ "$2" == "false" ]]; then
+        AUTO_PUBLISH=false
+      fi
+      shift 2
+      ;;
+    *)
+      if [[ -z "$JSON_FILE" ]]; then
+        JSON_FILE="$1"
+      else
+        error_exit "Unexpected argument: $1"
+      fi
+      shift
+      ;;
+  esac
+done
+
+# Validate required file argument
+if [[ -z "$JSON_FILE" ]]; then
+  error_exit "Usage: bin/sync <json-file> [--publish false] [--debug]"
+fi
+
+# Validate .env file
+if [[ ! -f ".env" ]]; then
+  error_exit ".env file not found in project root. Please create it and define PEEK_APP_REGISTRY_URL and PEEK_APP_REGISTRY_AUTH_TOKEN."
+fi
+
+log_debug "Parsing .env file"
+set -o allexport
+source .env
+set +o allexport
+
+# Validate required env vars
+[[ -z "$PEEK_APP_REGISTRY_URL" ]] && error_exit "Missing PEEK_APP_REGISTRY_URL in .env"
+[[ -z "$PEEK_APP_REGISTRY_AUTH_TOKEN" ]] && error_exit "Missing PEEK_APP_REGISTRY_AUTH_TOKEN in .env"
+
+URL="$PEEK_APP_REGISTRY_URL"
+TOKEN="$PEEK_APP_REGISTRY_AUTH_TOKEN"
+
+log_debug "Using Registry URL: $URL"
+log_debug "Using Auth Token: Bearer [REDACTED]"
+log_debug "Using JSON File: $JSON_FILE"
+
+# Check for JSON file
+if [[ ! -f "$JSON_FILE" ]]; then
+  error_exit "$JSON_FILE not found"
+fi
+
+if [ "$DEBUG" = true ]; then
+  echo "📄 Contents of $JSON_FILE:"
+  cat "$JSON_FILE"
+  echo
+fi
+
+# Confirm action
+echo
+echo "📤 Ready to sync:"
+echo "    File: $JSON_FILE"
+echo "    Registry: $URL"
+echo "    Auto-publish: $AUTO_PUBLISH"
+echo
+read -p "Are you sure you want to continue? (yes/no): " CONFIRM
+if [[ "$CONFIRM" != "yes" ]]; then
+  echo "Aborted."
+  exit 1
+fi
+echo
+
+# Function to send request
+send_request() {
+  local ALLOW_PROD_FLAG=$1
+  local FINAL_URL="$URL/apps/upsert?auto-publish=$AUTO_PUBLISH"
+
+  if [[ "$ALLOW_PROD_FLAG" == "true" ]]; then
+    FINAL_URL="$FINAL_URL&allow-prod=true"
+  fi
+
+  log_debug "Sending POST request to $FINAL_URL"
+
+  set +e
+  RESPONSE=$(curl --silent --show-error --write-out "\nHTTP_STATUS:%{http_code}" \
+    --request POST \
+    --url "$FINAL_URL" \
+    --header "Authorization: Bearer $TOKEN" \
+    --header "Content-Type: application/json" \
+    --header "User-Agent: sync-script/1.0" \
+    --data "@$JSON_FILE")
+  CURL_EXIT=$?
+  set -e
+
+  HTTP_STATUS=$(echo "$RESPONSE" | sed -n 's/.*HTTP_STATUS://p')
+  RESPONSE_BODY=$(echo "$RESPONSE" | sed '/HTTP_STATUS:/d')
+}
+
+# Initial request
+send_request "false"
+
+# Check if 403 due to missing allow-prod
+ERROR_DETAIL=$(echo "$RESPONSE_BODY" | jq -r '.errors.detail // empty')
+if [[ "$HTTP_STATUS" == "403" && "$ERROR_DETAIL" == "Auto-publish is not allowed in production without allow-prod=true" ]]; then
+  echo
+  echo "⚠️  Attempting to auto-publish this app would create a new production version."
+  read -p "Are you sure you want to proceed with production publish? (yes/no): " PUBLISH_CONFIRM
+  if [[ "$PUBLISH_CONFIRM" != "yes" ]]; then
+    echo "Aborted."
+    exit 1
+  fi
+
+  echo
+  echo "🔁 Retrying with allow-prod=true..."
+  send_request "true"
+fi
+
+if [ "$DEBUG" = true ]; then
+  echo "📥 Raw response from server:"
+  echo "$RESPONSE_BODY"
+  echo "🔢 HTTP status code: $HTTP_STATUS"
+fi
+
+if [ "$CURL_EXIT" -ne 0 ] || [[ "$HTTP_STATUS" -ge 400 ]]; then
+  echo "❌ Request failed with status $HTTP_STATUS"
+  echo "$RESPONSE_BODY"
+  exit 1
+fi
+
+# Extract action
+ACTION=$(echo "$RESPONSE_BODY" | jq -r '.data.action')
+
+# Check for shared_secret_key and notify user
+SECRET=$(echo "$RESPONSE_BODY" | jq -r '.data.app.shared_secret_key // empty')
+
+if [[ -n "$SECRET" ]]; then
+  echo
+  echo "🔐 IMPORTANT: A new shared secret key was generated!"
+  echo "    → $SECRET"
+  echo
+  echo "💾 Save this secret in a secure place. It will NOT be shown again."
+  echo
+  echo "📌 Deployment Instructions:"
+  echo "  • For PRODUCTION: Set this secret as the environment variable:"
+  echo "        PEEK_APP_SECRET"
+  echo
+  echo "  • For SANDBOX / LOCAL / DEV: This is the shared sandbox secret."
+  echo "        No need to configure this in each environment."
+  echo "        Your app runtime should fallback to this shared value if not overridden."
+  echo
+fi
+
+# Clean and save the updated payload back to file
+CLEANED=$(echo "$RESPONSE_BODY" | jq 'del(.data.action, .data.app.shared_secret_key)')
+echo "$CLEANED" > "$JSON_FILE"
+
+echo "✅ Complete: action $ACTION"

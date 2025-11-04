@@ -1,0 +1,70 @@
+name: Validate App Configurations
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'app.json'
+      - 'app-sandbox.json'
+      - 'docs/app.schema.json'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'app.json'
+      - 'app-sandbox.json'
+      - 'docs/app.schema.json'
+
+jobs:
+  validate-app-configs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install ajv-cli
+        run: npm install -g ajv-cli
+
+      - name: Validate app configurations
+        run: |
+          exit_code=0
+
+          echo "Validating app configuration files in root directory"
+
+          # Validate app.json if it exists
+          if [[ -f "app.json" ]]; then
+            echo "  Validating app.json"
+            if ajv validate -s docs/app.schema.json -d "app.json"; then
+              echo "  ✅ app.json is valid"
+            else
+              echo "  ❌ app.json is invalid"
+              exit_code=1
+            fi
+          else
+            echo "  ⚠️  app.json not found"
+          fi
+
+          # Validate app-sandbox.json if it exists
+          if [[ -f "app-sandbox.json" ]]; then
+            echo "  Validating app-sandbox.json"
+            if ajv validate -s docs/app.schema.json -d "app-sandbox.json"; then
+              echo "  ✅ app-sandbox.json is valid"
+            else
+              echo "  ❌ app-sandbox.json is invalid"
+              exit_code=1
+            fi
+          else
+            echo "  ⚠️  app-sandbox.json not found"
+          fi
+
+          if [[ $exit_code -ne 0 ]]; then
+            echo "❌ One or more app configuration files failed validation"
+            exit 1
+          else
+            echo "✅ All app configuration files are valid"
+          fi

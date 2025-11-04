@@ -1,0 +1,3 @@
+#!/bin/bash
+fly ssh console --pty -C "bin/phoenix_starter_kit remote"
+

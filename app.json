@@ -1,0 +1,44 @@
+{
+  "_comment": "This is an example app configuration. After running bin/rename, update the base_url to match your app's domain (e.g., https://your-app-name.peeklabs.com or your production URL).",
+  "data": {
+    "app": {
+      "app_version": {
+        "base_url": "https://phoenix_starter_kit.peeklabs.com",
+        "screenshots": [],
+        "description": "Phoenix Starter Kit",
+        "icon_url": "/images/logo.png",
+        "display_version": "0.0.1",
+        "status": "published",
+        "categories": [],
+        "extendables": [
+          {
+            "slug": "app_registry_settings_url@v1",
+            "configuration": {
+              "url": "/peek-pro/settings"
+            }
+          },
+          {
+            "slug": "app_registry_webhook@v1",
+            "configuration": {
+              "url": "/peek-pro/api/on-installation-status-change"
+            }
+          },
+          {
+            "slug": "broadcast_to_url@v1",
+            "configuration": {
+              "url": "/peek-pro/api/on-booking-change",
+              "events": [
+                "booking_created",
+                "booking_updated"
+              ],
+              "output_fields_gql_query": "{ id }",
+              "output_format": "gql"
+            }
+          }
+        ]
+      },
+      "name": "Phoenix Starter Kit",
+      "id": "phoenix-starter-kit"
+    }
+  }
+}

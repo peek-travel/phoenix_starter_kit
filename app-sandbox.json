@@ -1,0 +1,49 @@
+{
+  "_comment": "This is an example sandbox app configuration. After running bin/rename, update the URLs and app IDs to match your sandbox app. The app_url and base_url will be provided when you register your app in the sandbox environment.",
+  "data": {
+    "app": {
+      "app_version": {
+        "extendables": [
+          {
+            "configuration": {
+              "url": "/peek-pro/api/on-installation-status-change"
+            },
+            "slug": "app_registry_webhook@v1"
+          },
+          {
+            "configuration": {
+              "url_mode": "prepend_base_url",
+              "url": "/peek-pro/settings"
+            },
+            "slug": "app_registry_settings_url@v1"
+          },
+          {
+            "configuration": {
+              "output_format": "gql",
+              "output_fields_gql_query": "{ id }",
+              "url": "/peek-pro/api/on-booking-change",
+              "events": [
+                "booking_created",
+                "booking_updated"
+              ],
+              "timeout": 60000
+            },
+            "slug": "broadcast_to_url@v1"
+          }
+        ],
+        "screenshots": [],
+        "privacy_url": null,
+        "icon_url": "/images/logo.png",
+        "helpdesk_url": null,
+        "display_version": "0.0.1",
+        "terms_url": null,
+        "categories": [],
+        "base_url": "https://phoenix-starter-kit.peeklabs.com",
+        "description": "Phoenix Starter Kit",
+        "status": "published"
+      },
+      "name": "Phoenix Starter Kit (sandbox)",
+      "id": "phoenix-starter-kit-sandbox"
+    }
+  }
+}

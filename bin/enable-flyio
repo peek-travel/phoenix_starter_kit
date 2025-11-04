@@ -1,0 +1,42 @@
+#!/bin/bash
+set -e
+
+echo "🚀 Enabling Fly.io deployment support..."
+echo ""
+
+# Check if fly-io directory exists
+if [ ! -d "fly-io" ]; then
+  echo "❌ Error: fly-io directory not found"
+  echo "   This script should be run from the project root"
+  exit 1
+fi
+
+# Create bin/ directory if it doesn't exist
+mkdir -p bin/
+
+# Copy Fly.io scripts to bin/
+echo "📋 Copying Fly.io scripts to bin/..."
+cp fly-io/dev bin/dev
+cp fly-io/proxy_prod bin/proxy_prod
+cp fly-io/shell_prod bin/shell_prod
+chmod +x bin/dev
+chmod +x bin/proxy_prod
+chmod +x bin/shell_prod
+echo "   ✅ Scripts copied"
+
+echo ""
+echo "✅ Fly.io support enabled!"
+echo ""
+echo "Next steps:"
+echo "1. Install Fly CLI: https://fly.io/docs/flyctl/install/"
+echo "2. Run 'fly launch' to create your app and generate fly.toml"
+echo "3. Update bin/proxy_prod with your database app name"
+echo "4. Update bin/shell_prod with your app name"
+echo "5. Set secrets: fly secrets set PEEK_APP_ID=... PEEK_APP_SECRET=... etc."
+echo "6. Deploy: fly deploy"
+echo ""
+echo "For GitHub Actions deployment:"
+echo "1. Get your Fly API token: fly auth token"
+echo "2. Add it as a GitHub secret named FLY_API_TOKEN"
+echo ""
+
