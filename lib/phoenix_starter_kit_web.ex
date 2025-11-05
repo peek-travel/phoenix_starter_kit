@@ -68,7 +68,7 @@ defmodule PhoenixStarterKitWeb do
     quote do
       use Phoenix.Component
       import PhoenixStarterKitWeb.CoreComponents
-      import PhoenixStarterKitWeb.Components.PeekComponents
+      import PeekAppSDK.UI.Odyssey
 
       # Import convenience functions from controllers
       import Phoenix.Controller,
@@ -87,7 +87,7 @@ defmodule PhoenixStarterKitWeb do
       # HTML escaping functionality
       import Phoenix.HTML
       # Core UI components
-      import PhoenixStarterKitWeb.Components.PeekComponents
+      import PeekAppSDK.UI.Odyssey
       import PhoenixStarterKitWeb.CoreComponents
 
       # Common modules used in templates

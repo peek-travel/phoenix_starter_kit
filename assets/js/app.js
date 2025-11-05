@@ -21,7 +21,9 @@ import "phoenix_html"
 // Establish Phoenix Socket and LiveView configuration.
 import { Socket } from "phoenix"
 import { LiveSocket } from "phoenix_live_view"
-import peekAppSDK from "peek_app_sdk/assets/js/odyssey.js"
+import { OdysseyHooks, addOdysseyGlobalEvents } from "peek_app_sdk/assets/js/odyssey.js"
+// Set up global event listeners from peek_app_sdk
+addOdysseyGlobalEvents(window);
 import topbar from "../vendor/topbar"
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
@@ -29,7 +31,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
   hooks: {
-    ...peekAppSDK,
+    ...OdysseyHooks,
     AutoClearFlash: {
       mounted() {
         let ignoredIDs = ["client-error", "server-error"];
