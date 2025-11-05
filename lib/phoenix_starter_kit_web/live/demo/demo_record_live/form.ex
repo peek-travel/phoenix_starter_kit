@@ -8,7 +8,7 @@ defmodule PhoenixStarterKitWeb.Demo.DemoRecordLive.Form do
   def render(assigns) do
     ~H"""
     <.header>
-      {@page_title}
+      <span data-integration="page-title">{@page_title}</span>
       <:subtitle>Use this form to manage demo_record records in your database.</:subtitle>
     </.header>
 

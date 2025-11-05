@@ -29,6 +29,7 @@ defmodule PhoenixStarterKit.DataCase do
       import Ecto.Changeset
       import Ecto.Query
       import PhoenixStarterKit.DataCase
+      import PhoenixStarterKitWeb.IntegrationTestHelpers
     end
   end
 

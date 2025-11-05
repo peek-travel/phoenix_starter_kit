@@ -17,7 +17,7 @@ defmodule PhoenixStarterKitWeb.Demo.DemoComponentsLive do
     ~H"""
     <div class="space-y-8">
       <.header>
-        Alert Components Demo
+        <span data-integration="page-title">Core Components Demo</span>
         <:subtitle>
           Explore different types of alerts available in the system.
         </:subtitle>

@@ -29,6 +29,7 @@ defmodule PhoenixStarterKitWeb.ConnCase do
       import Plug.Conn
       import Phoenix.ConnTest
       import PhoenixStarterKitWeb.ConnCase
+      import PhoenixStarterKitWeb.IntegrationTestHelpers
     end
   end
 
