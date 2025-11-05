@@ -21,30 +21,35 @@ defmodule PhoenixStarterKitWeb.SettingsLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash}>
-      <.alert color="info">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center">
-            Welcome!
-            <div class="ml-2 text-sm text-gray-600">
-              You are logged in as {@partner_user.email} for {@partner.name}.
+      <.odyssey_alert type="info">
+        <:title>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center">
+              Welcome!
+              <div class="ml-2 text-sm text-gray-600">
+                You are logged in as {@partner_user.email} for {@partner.name}.
+              </div>
             </div>
+            <%= if @partner.is_test do %>
+              <span class="inline-flex items-center rounded-md bg-yellow-50 px-2 py-1 text-xs font-medium text-yellow-800 ring-1 ring-inset ring-yellow-600/20">
+                Test Account
+              </span>
+            <% end %>
           </div>
-          <%= if @partner.is_test do %>
-            <span class="inline-flex items-center rounded-md bg-yellow-50 px-2 py-1 text-xs font-medium text-yellow-800 ring-1 ring-inset ring-yellow-600/20">
-              Test Account
-            </span>
-          <% end %>
-        </div>
-      </.alert>
+        </:title>
+      </.odyssey_alert>
 
-      <.divider />
+      <.odyssey_divider />
 
-      <.message>
-        Check out the demo:
-        <.link class="underline" href={~p"/demo/demo_records"}>
-          Core Components
-        </.link>
-      </.message>
+      <.odyssey_alert type="info">
+        <:title>Core Components</:title>
+        <:message>
+          Check out the demo:
+          <.link class="underline" href={~p"/demo/demo_records"}>
+            Core Components
+          </.link>
+        </:message>
+      </.odyssey_alert>
     </Layouts.app>
     """
   end

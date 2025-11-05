@@ -7,8 +7,6 @@ defmodule PhoenixStarterKitWeb.Demo.DemoComponentsLive do
   """
   use PhoenixStarterKitWeb, :live_view
 
-  alias PeekAppSDK.UI.Odyssey.Alerts
-
   @impl true
   def mount(_params, _session, socket) do
     {:ok, socket}
@@ -29,40 +27,40 @@ defmodule PhoenixStarterKitWeb.Demo.DemoComponentsLive do
         <section>
           <h2 class="text-xl font-semibold mb-4">Basic Alerts</h2>
           <div class="space-y-4">
-            <Alerts.alert type="success">
+            <.odyssey_alert type="success">
               <:title>Success!</:title>
               <:message>This is a success alert message.</:message>
-            </Alerts.alert>
+            </.odyssey_alert>
 
-            <Alerts.alert type="warning">
+            <.odyssey_alert type="warning">
               <:title>Warning</:title>
               <:message>This is a warning alert message.</:message>
-            </Alerts.alert>
+            </.odyssey_alert>
 
-            <Alerts.alert type="error">
+            <.odyssey_alert type="error">
               <:title>Error</:title>
               <:message>This is an error alert message.</:message>
-            </Alerts.alert>
+            </.odyssey_alert>
 
-            <Alerts.alert type="info">
+            <.odyssey_alert type="info">
               <:title>Information</:title>
               <:message>This is an info alert message.</:message>
-            </Alerts.alert>
+            </.odyssey_alert>
           </div>
         </section>
 
         <section>
           <h2 class="text-xl font-semibold mb-4">Alerts with Actions</h2>
           <div class="space-y-4">
-            <Alerts.alert type="info" action_text="Take Action" action_url="#">
+            <.odyssey_alert type="info" action_text="Take Action" action_url="#">
               <:title>Action Required</:title>
               <:message>This alert has actions you can take.</:message>
-            </Alerts.alert>
+            </.odyssey_alert>
 
-            <Alerts.alert type="warning" action_text="Connect Account" action_url="https://example.com">
+            <.odyssey_alert type="warning" action_text="Connect Account" action_url="https://example.com">
               <:title>Connect Your Account</:title>
               <:message>To get started, please connect your account.</:message>
-            </Alerts.alert>
+            </.odyssey_alert>
           </div>
         </section>
 
