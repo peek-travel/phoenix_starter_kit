@@ -53,10 +53,10 @@ defmodule PhoenixStarterKitWeb.Demo.DemoRecordLiveTest do
     setup [:create_demo_record]
 
     test "lists all demo_records", %{conn: conn, demo_record: demo_record} do
-      {:ok, _index_live, html} = live(conn, ~p"/demo/demo_records")
+      {:ok, index_live, _html} = live(conn, ~p"/demo/demo_records")
 
-      assert html =~ "Listing Demo records"
-      assert html =~ demo_record.name
+      assert text_for_integration_test_element(index_live, "page-title") == "Listing Demo records"
+      assert text_for_integration_test_element(index_live, "demo-record-name-#{demo_record.id}") == demo_record.name
     end
 
     test "saves new demo_record", %{conn: conn} do
@@ -68,7 +68,7 @@ defmodule PhoenixStarterKitWeb.Demo.DemoRecordLiveTest do
                |> render_click()
                |> follow_redirect(conn, ~p"/demo/demo_records/new")
 
-      assert render(form_live) =~ "New Demo record"
+      assert text_for_integration_test_element(form_live, "page-title") == "New Demo record"
 
       assert form_live
              |> form("#demo_record-form", demo_record: @invalid_attrs)
@@ -80,9 +80,10 @@ defmodule PhoenixStarterKitWeb.Demo.DemoRecordLiveTest do
                |> render_submit()
                |> follow_redirect(conn, ~p"/demo/demo_records")
 
-      html = render(index_live)
-      assert html =~ "Demo record created successfully"
-      assert html =~ "some name"
+      assert text_for_integration_test_element(index_live, "flash-content-flash-info") == "Demo record created successfully"
+
+      demo_record = PhoenixStarterKit.Demo.list_demo_records() |> Enum.find(&(&1.name == "some name"))
+      assert text_for_integration_test_element(index_live, "demo-record-name-#{demo_record.id}") == "some name"
     end
 
     test "updates demo_record in listing", %{conn: conn, demo_record: demo_record} do
@@ -94,7 +95,7 @@ defmodule PhoenixStarterKitWeb.Demo.DemoRecordLiveTest do
                |> render_click()
                |> follow_redirect(conn, ~p"/demo/demo_records/#{demo_record}/edit")
 
-      assert render(form_live) =~ "Edit Demo record"
+      assert text_for_integration_test_element(form_live, "page-title") == "Edit Demo record"
 
       assert form_live
              |> form("#demo_record-form", demo_record: @invalid_attrs)
@@ -106,9 +107,8 @@ defmodule PhoenixStarterKitWeb.Demo.DemoRecordLiveTest do
                |> render_submit()
                |> follow_redirect(conn, ~p"/demo/demo_records")
 
-      html = render(index_live)
-      assert html =~ "Demo record updated successfully"
-      assert html =~ "some updated name"
+      assert text_for_integration_test_element(index_live, "flash-content-flash-info") == "Demo record updated successfully"
+      assert text_for_integration_test_element(index_live, "demo-record-name-#{demo_record.id}") == "some updated name"
     end
 
     test "deletes demo_record in listing", %{conn: conn, demo_record: demo_record} do
@@ -123,10 +123,10 @@ defmodule PhoenixStarterKitWeb.Demo.DemoRecordLiveTest do
     setup [:create_demo_record]
 
     test "displays demo_record", %{conn: conn, demo_record: demo_record} do
-      {:ok, _show_live, html} = live(conn, ~p"/demo/demo_records/#{demo_record}")
+      {:ok, show_live, _html} = live(conn, ~p"/demo/demo_records/#{demo_record}")
 
-      assert html =~ "Show Demo record"
-      assert html =~ demo_record.name
+      assert text_for_integration_test_element(show_live, "page-title") == "Show Demo record"
+      assert text_for_integration_test_element(show_live, "demo-record-name") == demo_record.name
     end
 
     test "updates demo_record and returns to show", %{conn: conn, demo_record: demo_record} do
@@ -138,7 +138,7 @@ defmodule PhoenixStarterKitWeb.Demo.DemoRecordLiveTest do
                |> render_click()
                |> follow_redirect(conn, ~p"/demo/demo_records/#{demo_record}/edit?return_to=show")
 
-      assert render(form_live) =~ "Edit Demo record"
+      assert text_for_integration_test_element(form_live, "page-title") == "Edit Demo record"
 
       assert form_live
              |> form("#demo_record-form", demo_record: @invalid_attrs)
@@ -150,9 +150,8 @@ defmodule PhoenixStarterKitWeb.Demo.DemoRecordLiveTest do
                |> render_submit()
                |> follow_redirect(conn, ~p"/demo/demo_records/#{demo_record}")
 
-      html = render(show_live)
-      assert html =~ "Demo record updated successfully"
-      assert html =~ "some updated name"
+      assert text_for_integration_test_element(show_live, "flash-content-flash-info") == "Demo record updated successfully"
+      assert text_for_integration_test_element(show_live, "demo-record-name") == "some updated name"
     end
   end
 end

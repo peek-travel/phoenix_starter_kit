@@ -7,20 +7,20 @@ defmodule PhoenixStarterKitWeb.Demo.DemoRecordLive.Show do
   def render(assigns) do
     ~H"""
     <.header>
-      Demo record {@demo_record.id}
+      <span data-integration="page-title">Show Demo record</span>
       <:subtitle>This is a demo_record record from your database.</:subtitle>
       <:actions>
         <.button navigate={~p"/demo/demo_records"}>
           <.icon name="hero-arrow-left" />
         </.button>
         <.button variant="primary" navigate={~p"/demo/demo_records/#{@demo_record}/edit?return_to=show"}>
-          <.icon name="hero-pencil-square" /> Edit demo_record
+          <.icon name="hero-pencil-square" /> Edit
         </.button>
       </:actions>
     </.header>
 
     <.list>
-      <:item title="Name">{@demo_record.name}</:item>
+      <:item title="Name"><span data-integration="demo-record-name">{@demo_record.name}</span></:item>
       <:item title="Description">{@demo_record.description}</:item>
       <:item title="Count">{@demo_record.count}</:item>
       <:item title="Rating">{@demo_record.rating}</:item>

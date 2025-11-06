@@ -23,7 +23,7 @@ defmodule PhoenixStarterKitWeb.SettingsLive do
     <Layouts.app flash={@flash}>
       <.odyssey_alert type="info">
         <:title>
-          <div class="flex items-center justify-between">
+          <div class="flex items-center justify-between" data-integration="welcome-message">
             <div class="flex items-center">
               Welcome!
               <div class="ml-2 text-sm text-gray-600">

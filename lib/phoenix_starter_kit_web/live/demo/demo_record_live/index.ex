@@ -7,7 +7,7 @@ defmodule PhoenixStarterKitWeb.Demo.DemoRecordLive.Index do
   def render(assigns) do
     ~H"""
     <.header>
-      Listing Demo records
+      <span data-integration="page-title">Listing Demo records</span>
       <:actions>
         <.button variant="primary" navigate={~p"/demo/demo_records/new"}>
           <.icon name="hero-plus" /> New Demo record
@@ -20,7 +20,9 @@ defmodule PhoenixStarterKitWeb.Demo.DemoRecordLive.Index do
       rows={@streams.demo_records}
       row_click={fn {_id, demo_record} -> JS.navigate(~p"/demo/demo_records/#{demo_record}") end}
     >
-      <:col :let={{_id, demo_record}} label="Name">{demo_record.name}</:col>
+      <:col :let={{_id, demo_record}} label="Name">
+        <span data-integration={"demo-record-name-#{demo_record.id}"}>{demo_record.name}</span>
+      </:col>
       <:col :let={{_id, demo_record}} label="Description">{demo_record.description}</:col>
       <:col :let={{_id, demo_record}} label="Count">{demo_record.count}</:col>
       <:col :let={{_id, demo_record}} label="Rating">{demo_record.rating}</:col>
