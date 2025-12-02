@@ -63,11 +63,11 @@ defmodule PhoenixStarterKitWeb.PeekPro.WebhookController do
   # These are great places to "do things"; for the uninstall case you might want
   # to clear out an API key, delete some records, let another system know, etc.
   defp on_uninstalled(partner) do
-    PeekAppSDK.Metrics.track_uninstall(partner.external_refid, partner.name, partner.is_test)
+    PeekAppSDK.Metrics.track_uninstall(partner)
   end
 
   defp on_installed(partner) do
-    PeekAppSDK.Metrics.track_install(partner.external_refid, partner.name, partner.is_test)
+    PeekAppSDK.Metrics.track_install(partner)
   end
 
   @doc """
@@ -92,6 +92,8 @@ defmodule PhoenixStarterKitWeb.PeekPro.WebhookController do
         send_resp(conn, :ok, "Unknown install ID")
 
       partner ->
+        # This is how you can send tracking events for important happenings:
+        # PeekAppSDK.Metrics.track(partner, "booking.changed", %{"test_event_property": "test_value"})
         send_resp(conn, :ok, "Partner #{partner.name} received a booking change: #{inspect(params)}")
     end
   end

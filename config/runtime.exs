@@ -37,7 +37,11 @@ if config_env() == :dev do
   # certainly will) then you have to jump through some hoops to ensure it works.
   # See .env.example
   config :phoenix_starter_kit, PhoenixStarterKitWeb.Endpoint,
-    url: [host: env!("PHX_HOST", :string, "localhost"), port: env!("PHX_PORT", :string, "4000")]
+    url: [
+      host: env!("PHX_HOST", :string, "localhost"),
+      port: env!("PHX_PORT", :integer, 4000),
+      scheme: env!("PHX_SCHEME", :string, "http")
+    ]
 
   # Configure embedded app URL; this is used for redirecting to app store if
   # needed (oauth or from a landing page; can be helpful when testing)
@@ -157,7 +161,8 @@ if config_env() == :prod do
   config :peek_app_sdk,
     peek_api_key: System.fetch_env!("PEEK_API_KEY"),
     peek_app_secret: System.fetch_env!("PEEK_APP_SECRET"),
-    peek_app_id: System.fetch_env!("PEEK_APP_ID")
+    peek_app_id: System.fetch_env!("PEEK_APP_ID"),
+    posthog_key: System.fetch_env!("POSTHOG_KEY")
 
   # uncomment if you need a client secret token
   # client_secret_token: System.fetch_env!("CLIENT_SECRET_TOKEN")
