@@ -9,12 +9,9 @@
         <.odyssey_divider />
       </div>
       <div class="mt-6">
-        <.link
-          href={Application.fetch_env!(:phoenix_starter_kit, :embedded_app_url)}
-          class="rounded-md py-2 px-3 font-medium text-sm leading-6 bg-brand hover:bg-brand-secondary text-white active:text-white/80"
-        >
+        <.button href={Application.fetch_env!(:phoenix_starter_kit, :embedded_app_url)} variant="primary">
           Install App
-        </.link>
+        </.button>
       </div>
     </div>
   </div>
