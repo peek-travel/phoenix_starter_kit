@@ -82,7 +82,7 @@ To start using this starter kit:
 - Make your .env file; `cp .env.example .env`
 - Run database migrations with `mix ecto.setup`
 - Start the Phoenix server with `bin/server`; ensure you can see things, etc.
-- Run `bin/dev` to set up a secure Cloudflare tunnel for development (see Development Tunnel section below)
+- Run [`ngrok`](#ngrok-method) or [`bin/dev`](#bindev-method) to set up a secure Cloudflare tunnel for development (see Development Tunnel section below)
 - Put your tunnel URL as the base_url inside app.json (e.g., `https://your-app-name-dev.peeklabs.com`)
 - **Contact Peek App Support** to obtain:
   - A test account for Peek Pro
@@ -93,6 +93,99 @@ To start using this starter kit:
   your publisher key and the URL of the registry you wish to interact with.
 
 ## Development Tunnel
+
+### Local Development
+
+#### ngrok Method
+
+The easiest and most direct way to publish an app without a formal deployment cycle is with `ngrok`. 
+If you do not have `ngrok` installed on your machine, you can install it with `brew install ngrok`.
+You will need to create an `ngrok` account if you do not have one already. You can link it with 
+either your GitHub or your Gmail account. The free-tier is suitable for the purposes of developing apps.
+
+Once it is installed, you can run `ngrok config add-authtoken <token>`, where `<token>` is the token
+provided when you created the `ngrok` account.
+
+You will also need to copy the URL provided by `ngrok` and paste it as the `PHX_HOST` value in the `.env`
+file. Do **not** include the protocol (eg. `https`) in the `PHX_HOST` value. `PHX_PORT` should be set to 
+`433` and `PHX_SCHEME` should be set to `https`. Your `.env` file will have a section that looks like this
+when completed correctly:
+
+```
+PHX_HOST="extravagant-salted-cornstalk.ngrok-free.dev"
+PHX_PORT="443"
+PHX_SCHEME="https"
+```
+
+Note: your `PHX_HOST` **will** be different than the one listed above.
+
+To run your app with `ngrok` after you have set it up, open two terminals. In the first, you should run:
+
+```bash
+bin/server
+```
+
+This will start the Phoenix application and should produce output like the following:
+
+```bash
+> bin/server
+Erlang/OTP 28 [erts-16.0.1] [source] [64-bit] [smp:14:14] [ds:14:14:10] [async-threads:1] [jit]
+
+[info] Running TestPeekAppWeb.Endpoint with Bandit 1.8.0 at 0.0.0.0:4000 (http)
+[info] Access TestPeekAppWeb.Endpoint at https://extravagant-salted-cornstalk.ngrok-free.dev
+Interactive Elixir (1.18.4) - press Ctrl+C to exit (type h() ENTER for help)
+[watch] build finished, watching for changes...
+[watch] build finished, watching for changes...
+/*! 🌼 daisyUI 5.0.8 */
+≈ tailwindcss v4.0.9
+```
+
+**Note**: You can navigate to the `0.0.0.0:4000` endpoint in your browser and see the scaffolded
+app. On Chromium-based browsers, the `0.0.0.0:4000` endpoint will work. However, it will **not**
+work on Webkit-based browsers (like Safari). Instead you will need to use `localhost:4000`.
+
+In the other terminal, you should run:
+
+```bash
+ngrok http 4000
+```
+
+This will start `ngrok` and forward from the 4000 port on your local machine. The output should look like:
+
+```
+ngrok
+
+🧱 Block threats before they reach your services with new WAF actions → https://ngrok.com/r/waf
+
+Session Status                online
+Account                       your.email@peek.com (Plan: Free)
+Version                       3.34.0
+Region                        United States (us)
+Web Interface                 http://127.0.0.1:4040
+Forwarding                    https://extravagant-salted-cornstalk.ngrok-free.dev -> http://localhost:4000
+
+Connections                   ttl     opn     rt1     rt5     p50     p90
+                              0       0       0.00    0.00    0.00    0.00
+```
+
+When both of these are running, you should be able to navigate to your version of the
+`https://extravagant-salted-cornstalk.ngrok-free.dev` URL and see your app. This URL can be
+accessed across systems.
+
+**Note**: If you get an SSL error when accessing the URL, your WiFi router might be configured in such a way
+that `ngrok` is blocked. On your cell phone, turn WiFi off and turn your cellular connection on and try accessing
+the URL. If this works, then it is an issue with your Internet hardware rather than `ngrok` or application
+configuration.
+
+#### `bin/dev` Method
+
+**Important**: To use this method, you need to contact Peek to create your publisher account. You will be provided
+with values to use in the `.env` file associated with your app:
+
+```
+PEEK_APP_REGISTRY_URL=<provided_app_registry_url>
+PEEK_APP_REGISTRY_AUTH_TOKEN=<provided_app_registry_auth_token>
+```
 
 Instead of using ngrok, use `bin/dev` to create a secure Cloudflare tunnel for development:
 
@@ -110,6 +203,27 @@ Your app will be available at `https://phoenix-starter-kit-dev.peeklabs.com` (or
 - Reuses existing tunnels when possible, recreates them when switching machines/developers
 
 **Multiple projects:** Each app gets its own tunnel config, so you can run multiple projects simultaneously on different ports.
+
+## `bin/sync app.json` (Experimental)
+
+Running `bin/sync app.json` requires `PEEK_APP_REGISTRY_URL` and `PEEK_APP_REGISTRY_AUTH_TOKEN` values.
+These values are provided by Peek and must be configured in `.env` before running `bin/sync app.json`.
+
+When running this command, you will be given a secret token.
+Enter this token as the value to the `PEEK_APP_SECRET` variable in the `.env` file.
+The other important keys and values in `.env` are as follows (note that `APP_API_KEY`
+should be any value; `not-used` is an acceptable value):
+
+```
+PEEK_APP_ID="{{the `id` value in app.json after running `bin/sync app.json`}}"
+EMBEDDED_APP_URL="{{the `app_url` value in app.json after running `bin/sync app.json`}}"
+PEEK_API_KEY="not-used"
+PEEK_APP_BASE_URL="{{a target url for an environment; ask Peek for further clarification}}"
+```
+
+**Note**: The `PEEK_APP_BASE_URL` should be configured for the target environment.
+For example, if you point `bin/sync` to stage, you need to set a stage app registry endpoint
+as the value so you can communicate with the SDK.
 
 ## An app w/ Multiple Envs
 
