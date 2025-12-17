@@ -1,0 +1,206 @@
+#!/bin/bash
+
+# Enable error handling
+set -e
+
+# Template repository URL
+TEMPLATE_REPO="https://github.com/peek-travel/phoenix_starter_kit"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+print_status() { echo -e "${BLUE}[INFO]${NC} $1"; }
+print_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
+print_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
+print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+# Function to handle errors
+handle_error() {
+  print_error "Error occurred during setup."
+  exit 1
+}
+trap handle_error ERR
+
+echo ""
+echo "=================================================================="
+echo "    Phoenix Starter Kit - Project Setup"
+echo "=================================================================="
+echo ""
+
+# Step 1: Get the template version (commit hash from master)
+print_status "Fetching template version from $TEMPLATE_REPO..."
+TEMPLATE_COMMIT=$(git ls-remote "$TEMPLATE_REPO" refs/heads/main | cut -f1)
+if [ -z "$TEMPLATE_COMMIT" ]; then
+  # Try master if main doesn't exist
+  TEMPLATE_COMMIT=$(git ls-remote "$TEMPLATE_REPO" refs/heads/master | cut -f1)
+fi
+
+if [ -z "$TEMPLATE_COMMIT" ]; then
+  print_warning "Could not fetch template version. Continuing without version tracking."
+else
+  print_success "Template version: ${TEMPLATE_COMMIT:0:8}"
+  echo "$TEMPLATE_COMMIT" > .phoenix_starter_kit_version
+  print_success "Created .phoenix_starter_kit_version"
+fi
+
+# Step 2: Ask for app name
+echo ""
+print_status "What would you like to name your application?"
+echo "  Enter a friendly name (e.g., 'My Awesome App', 'Peek Inventory')"
+echo ""
+read -p "App name: " FRIENDLY_NAME
+
+if [ -z "$FRIENDLY_NAME" ]; then
+  print_error "App name is required."
+  exit 1
+fi
+
+# Convert friendly name to different formats
+SNAKE_CASE=$(echo "$FRIENDLY_NAME" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/_/g' | sed 's/__*/_/g' | sed 's/^_//g' | sed 's/_$//g')
+UPPER_SNAKE_CASE=$(echo "$FRIENDLY_NAME" | tr '[:lower:]' '[:upper:]' | sed 's/[^A-Z0-9]/_/g' | sed 's/__*/_/g' | sed 's/^_//g' | sed 's/_$//g')
+DASH_CASE=$(echo "$FRIENDLY_NAME" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//g' | sed 's/-$//g')
+PASCAL_CASE=""
+for word in $FRIENDLY_NAME; do
+  word_capitalized="$(tr '[:lower:]' '[:upper:]' <<< ${word:0:1})${word:1}"
+  PASCAL_CASE="${PASCAL_CASE}${word_capitalized}"
+done
+
+echo ""
+echo "Using formats:"
+echo "  Friendly name: $FRIENDLY_NAME"
+echo "  PascalCase: $PASCAL_CASE"
+echo "  snake_case: $SNAKE_CASE"
+echo "  UPPER_SNAKE_CASE: $UPPER_SNAKE_CASE"
+echo "  dash-case: $DASH_CASE"
+echo ""
+
+# Confirm with the user
+read -p "Continue with these names? (y/n) " -n 1 -r
+echo
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+  print_status "Setup cancelled."
+  exit 1
+fi
+
+# Step 3: Ask for deployment platform
+echo ""
+echo "=================================================================="
+print_status "Which deployment platform will you use?"
+echo "=================================================================="
+echo ""
+echo "  1) Fly.io"
+echo "  2) Other (Render, Heroku, Gigalixir, AWS, etc.)"
+echo ""
+read -p "Enter choice (1 or 2): " PLATFORM_CHOICE
+
+case $PLATFORM_CHOICE in
+  1)
+    PLATFORM="flyio"
+    print_success "Selected: Fly.io"
+    ;;
+  *)
+    PLATFORM="other"
+    print_success "Selected: Other platform"
+    ;;
+esac
+
+# Step 4: Perform renaming
+echo ""
+print_status "Starting renaming process..."
+
+# Replace content in all files
+print_status "Replacing content in files..."
+find . -type f -not -path "*/\.*" -not -path "*/deps/*" -not -path "*/node_modules/*" -not -path "*/priv/static/*" -not -path "*/_build/*" -exec grep -l "Phoenix Starter Kit\|PhoenixStarterKit\|PHOENIX_STARTER_KIT\|phoenix_starter_kit\|phoenix-starter-kit" {} \; 2>/dev/null | while read file; do
+  echo "  Processing: $file"
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    sed -i '' "s/PHOENIX_STARTER_KIT/$UPPER_SNAKE_CASE/g" "$file"
+    sed -i '' "s/Phoenix Starter Kit/$FRIENDLY_NAME/g" "$file"
+    sed -i '' "s/PhoenixStarterKit/$PASCAL_CASE/g" "$file"
+    sed -i '' "s/phoenix_starter_kit/$SNAKE_CASE/g" "$file"
+    sed -i '' "s/phoenix-starter-kit/$DASH_CASE/g" "$file"
+  else
+    sed -i "s/PHOENIX_STARTER_KIT/$UPPER_SNAKE_CASE/g" "$file"
+    sed -i "s/Phoenix Starter Kit/$FRIENDLY_NAME/g" "$file"
+    sed -i "s/PhoenixStarterKit/$PASCAL_CASE/g" "$file"
+    sed -i "s/phoenix_starter_kit/$SNAKE_CASE/g" "$file"
+    sed -i "s/phoenix-starter-kit/$DASH_CASE/g" "$file"
+  fi
+done
+
+# Rename files
+print_status "Renaming files..."
+find . -type f \( -name "*phoenix_starter_kit*" -o -name "*phoenix-starter-kit*" \) -not -path "*/\.*" -not -path "*/deps/*" -not -path "*/node_modules/*" -not -path "*/_build/*" 2>/dev/null | while read file; do
+  new_file=$(echo "$file" | sed "s/phoenix_starter_kit/$SNAKE_CASE/g" | sed "s/phoenix-starter-kit/$DASH_CASE/g")
+  echo "  $file -> $new_file"
+  mkdir -p "$(dirname "$new_file")"
+  mv "$file" "$new_file"
+done
+
+# Rename directories
+print_status "Renaming directories..."
+find . -type d \( -name "*phoenix_starter_kit*" -o -name "*phoenix-starter-kit*" \) -not -path "*/\.*" -not -path "*/deps/*" -not -path "*/node_modules/*" -not -path "*/_build/*" 2>/dev/null | sort -r | while read dir; do
+  new_dir=$(echo "$dir" | sed "s/phoenix_starter_kit/$SNAKE_CASE/g" | sed "s/phoenix-starter-kit/$DASH_CASE/g")
+  echo "  $dir -> $new_dir"
+  mkdir -p "$(dirname "$new_dir")"
+  mv "$dir" "$new_dir"
+done
+
+print_success "Renaming complete!"
+
+# Step 5: Handle deployment platform
+echo ""
+if [ "$PLATFORM" = "flyio" ]; then
+  print_status "Setting up Fly.io deployment support..."
+  if [ -f "bin/enable-flyio" ]; then
+    bin/enable-flyio
+  else
+    print_warning "bin/enable-flyio not found. Fly.io setup skipped."
+  fi
+else
+  print_status "Removing Fly.io specific files..."
+  if [ -d "fly-io" ]; then
+    rm -rf fly-io
+    print_success "Removed fly-io/ directory"
+  fi
+  if [ -f "bin/enable-flyio" ]; then
+    rm bin/enable-flyio
+    print_success "Removed bin/enable-flyio"
+  fi
+fi
+
+# Step 6: Run checks
+echo ""
+print_status "Running checks to verify everything works..."
+if bin/check; then
+  print_success "All checks passed!"
+else
+  print_error "Checks failed. Please review the errors above."
+  exit 1
+fi
+
+# Final summary
+echo ""
+echo "=================================================================="
+print_success "Setup complete!"
+echo "=================================================================="
+echo ""
+echo "Your project '$FRIENDLY_NAME' is ready."
+echo ""
+echo "Next steps:"
+echo "  1. Update your git remote: git remote set-url origin <your-repo-url>"
+echo "  2. Make your .env file: cp .env.example .env"
+echo "  3. Run database migrations: mix ecto.setup"
+echo "  4. Start the server: bin/server"
+echo "  5. Commit your changes: git add . && git commit -m \"Initialize $FRIENDLY_NAME from template\""
+echo ""
+if [ "$PLATFORM" = "flyio" ]; then
+  echo "Fly.io deployment:"
+  echo "  - Run 'fly launch' to create your app"
+  echo "  - See README.md for full deployment instructions"
+  echo ""
+fi
+

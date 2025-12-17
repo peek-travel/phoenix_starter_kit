@@ -24,6 +24,11 @@ chmod +x bin/proxy_prod
 chmod +x bin/shell_prod
 echo "   ✅ Scripts copied"
 
+# Clean up fly-io directory (no longer needed)
+echo "🧹 Cleaning up fly-io directory..."
+rm -rf fly-io
+echo "   ✅ fly-io directory removed"
+
 echo ""
 echo "✅ Fly.io support enabled!"
 echo ""
