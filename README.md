@@ -77,20 +77,23 @@ Security is a priority in the application design:
 
 To start using this starter kit:
 
-- [Create a new repo from this template](https://github.com/new?owner=peek-travel&template_name=phoenix_starter_kit&template_owner=peek-travel), run mix deps.get and bin/check and ensure things are kosher.
-- Run `bin/rename "Your Project Name"`
-- Make your .env file; `cp .env.example .env`
-- Run database migrations with `mix ecto.setup`
-- Start the Phoenix server with `bin/server`; ensure you can see things, etc.
-- Run [`ngrok`](#ngrok-method) or [`bin/dev`](#bindev-method) to set up a secure Cloudflare tunnel for development (see Development Tunnel section below)
-- Put your tunnel URL as the base_url inside app.json (e.g., `https://your-app-name-dev.peeklabs.com`)
-- **Contact Peek App Support** to obtain:
-  - A test account for Peek Pro
-  - A publisher API key to push your app to the sandbox environment
-  - A gateway key if you need to communicate with the Peek Pro API
-- Experimental: `bin/sync app.json` will guide you through creating/updating
-  an app in the registry. You will need to update the env file accordingly with
-  your publisher key and the URL of the registry you wish to interact with.
+1. [Create a new repo from this template](https://github.com/new?owner=peek-travel&template_name=phoenix_starter_kit&template_owner=peek-travel)
+2. Clone your new repository
+3. Run `bin/setup` and follow the interactive prompts:
+   - Enter your application name (e.g., "My Awesome App")
+   - Select your deployment platform (Fly.io or other)
+4. Make your .env file: `cp .env.example .env`
+5. Run database migrations with `mix ecto.setup`
+6. Start the Phoenix server with `bin/server`
+7. Run [`ngrok`](#ngrok-method) or [`bin/dev`](#bindev-method) to set up a secure tunnel for development (see Development Tunnel section below)
+8. Put your tunnel URL as the base_url inside app.json (e.g., `https://your-app-name-dev.peeklabs.com`)
+9. **Contact Peek App Support** to obtain:
+   - A test account for Peek Pro
+   - A publisher API key to push your app to the sandbox environment
+   - A gateway key if you need to communicate with the Peek Pro API
+10. Experimental: `bin/sync app.json` will guide you through creating/updating an app in the registry
+
+The setup script creates a `.phoenix_starter_kit_version` file containing the template commit hash. This enables future auto-update capabilities to pull in template improvements.
 
 ## Development Tunnel
 
@@ -98,16 +101,16 @@ To start using this starter kit:
 
 #### ngrok Method
 
-The easiest and most direct way to publish an app without a formal deployment cycle is with `ngrok`. 
+The easiest and most direct way to publish an app without a formal deployment cycle is with `ngrok`.
 If you do not have `ngrok` installed on your machine, you can install it with `brew install ngrok`.
-You will need to create an `ngrok` account if you do not have one already. You can link it with 
+You will need to create an `ngrok` account if you do not have one already. You can link it with
 either your GitHub or your Gmail account. The free-tier is suitable for the purposes of developing apps.
 
 Once it is installed, you can run `ngrok config add-authtoken <token>`, where `<token>` is the token
 provided when you created the `ngrok` account.
 
 You will also need to copy the URL provided by `ngrok` and paste it as the `PHX_HOST` value in the `.env`
-file. Do **not** include the protocol (eg. `https`) in the `PHX_HOST` value. `PHX_PORT` should be set to 
+file. Do **not** include the protocol (eg. `https`) in the `PHX_HOST` value. `PHX_PORT` should be set to
 `433` and `PHX_SCHEME` should be set to `https`. Your `.env` file will have a section that looks like this
 when completed correctly:
 
@@ -246,12 +249,11 @@ To customize the starter kit for your specific Peek Pro app:
 
 The `bin/` directory contains several useful scripts:
 
+- **`bin/setup`**: Interactive setup wizard that renames the project, configures deployment platform, and creates version tracking file.
 - **`bin/dev`**: Sets up and runs a Cloudflare tunnel for development. Automatically creates `{app-name}-dev.peeklabs.com` tunnel.
 - **`bin/server`**: Starts the Phoenix server with IEx for development.
-- **`bin/rename`**: Renames the entire project from "Phoenix Starter Kit" to your app name.
 - **`bin/check`**: Runs tests and code quality checks.
 - **`bin/sync`**: Syncs your app configuration with the Peek Pro registry.
-- **`bin/enable-flyio`**: Enables Fly.io deployment support (optional, see deployment section below).
 
 ## Deployment
 
@@ -270,16 +272,11 @@ This application can be deployed to any platform that supports Phoenix applicati
 - AWS/GCP/Azure with Docker
 - Your own infrastructure
 
-### Optional: Deploying to Fly.io
+### Deploying to Fly.io
 
-If you want to deploy to [Fly.io](https://fly.io/), first run the setup script to add Fly.io-specific files:
+If you selected Fly.io during `bin/setup`, the following scripts were automatically added:
 
-```bash
-bin/enable-flyio
-```
-
-This will create:
-
+- `bin/dev` - Cloudflare tunnel for development
 - `bin/proxy_prod` - Script to connect to production database locally
 - `bin/shell_prod` - Script to open IEx shell on production
 
