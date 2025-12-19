@@ -145,18 +145,23 @@ defmodule PhoenixStarterKit.Partners do
   Creates or updates a partner for a PeekPro installation.
 
   If a partner with the given external_refid exists, returns it.
-  Otherwise, creates a new partner with the given external_refid and name.
+  Otherwise, creates a new partner with the given external_refid, name, and platform.
 
   ## Examples
 
-      iex> upsert_for_peek_pro_installation("external-123", "Test Partner", "America/Los_Angeles")
+      iex> upsert_for_peek_pro_installation({"external-123", :peek}, "Test Partner", "America/Los_Angeles")
       {:ok, %Partner{}}
 
   """
-  def upsert_for_peek_pro_installation(external_refid, name, timezone) do
+  def upsert_for_peek_pro_installation({external_refid, platform}, name, timezone) do
     case get_partner_by_external_id(external_refid) do
       nil ->
-        create_partner(%{name: name, external_refid: external_refid, timezone: timezone})
+        create_partner(%{
+          name: name,
+          external_refid: external_refid,
+          timezone: timezone,
+          platform: platform
+        })
 
       partner ->
         {:ok, partner}

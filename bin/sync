@@ -103,7 +103,7 @@ send_request() {
     FINAL_URL="$FINAL_URL&allow-prod=true"
   fi
 
-  log_debug "Sending POST request to $FINAL_URL"
+	  log_debug "Sending POST request to $FINAL_URL"
 
   set +e
   RESPONSE=$(curl --silent --show-error --write-out "\nHTTP_STATUS:%{http_code}" \
@@ -116,15 +116,26 @@ send_request() {
   CURL_EXIT=$?
   set -e
 
-  HTTP_STATUS=$(echo "$RESPONSE" | sed -n 's/.*HTTP_STATUS://p')
-  RESPONSE_BODY=$(echo "$RESPONSE" | sed '/HTTP_STATUS:/d')
+	  if [ "$DEBUG" = true ]; then
+	    echo "📥 Raw HTTP response (including HTTP_STATUS marker):"
+	    echo "$RESPONSE"
+	    echo
+	  fi
+
+	  HTTP_STATUS=$(echo "$RESPONSE" | sed -n 's/.*HTTP_STATUS://p')
+	  RESPONSE_BODY=$(echo "$RESPONSE" | sed '/HTTP_STATUS:/d')
 }
 
 # Initial request
 send_request "false"
 
 # Check if 403 due to missing allow-prod
-ERROR_DETAIL=$(echo "$RESPONSE_BODY" | jq -r '.errors.detail // empty')
+ERROR_DETAIL=""
+if [[ "$HTTP_STATUS" == "403" ]]; then
+  # Some error responses are not JSON:API-style arrays; guard jq so it can't blow up the script
+  ERROR_DETAIL=$(echo "$RESPONSE_BODY" | jq -r '.errors[0].detail // empty' 2>/dev/null || echo "")
+fi
+
 if [[ "$HTTP_STATUS" == "403" && "$ERROR_DETAIL" == "Auto-publish is not allowed in production without allow-prod=true" ]]; then
   echo
   echo "⚠️  Attempting to auto-publish this app would create a new production version."

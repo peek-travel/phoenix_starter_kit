@@ -19,7 +19,8 @@ defmodule PhoenixStarterKit.PartnersFixtures do
       external_refid: unique_external_refid(),
       peek_pro_installation_id: unique_peek_pro_installation_id(),
       is_test: false,
-      timezone: "America/Los_Angeles"
+      timezone: "America/Los_Angeles",
+      platform: :peek
     })
   end
 

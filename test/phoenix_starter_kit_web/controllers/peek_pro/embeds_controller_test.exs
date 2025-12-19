@@ -47,7 +47,8 @@ defmodule PhoenixStarterKitWeb.PeekPro.EmbedsControllerTest do
       name = "Test Partner"
       install_id = "install-#{System.unique_integer()}"
 
-      {:ok, partner} = PhoenixStarterKit.Partners.upsert_for_peek_pro_installation(external_refid, name, "America/New_York")
+      {:ok, partner} =
+        PhoenixStarterKit.Partners.upsert_for_peek_pro_installation({external_refid, :peek}, name, "America/New_York")
 
       {:ok, partner} =
         PhoenixStarterKit.Partners.update_partner(partner, %{peek_pro_installation_id: install_id})

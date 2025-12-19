@@ -31,6 +31,7 @@ defmodule PhoenixStarterKitWeb.PeekPro.WebhookControllerTest do
       assert partner.peek_pro_installation.status == :installed
       assert partner.peek_pro_installation.display_version == "1.0.0"
       assert partner.peek_pro_installation.install_id == install_id
+      assert partner.platform == :peek
     end
 
     test "updates a partner when it exists", %{conn: conn} do
@@ -39,7 +40,8 @@ defmodule PhoenixStarterKitWeb.PeekPro.WebhookControllerTest do
       name = "Test Partner"
       install_id = "install-#{System.unique_integer()}"
 
-      {:ok, partner} = Partners.upsert_for_peek_pro_installation(external_refid, name, "America/New_York")
+      {:ok, partner} =
+        Partners.upsert_for_peek_pro_installation({external_refid, :peek}, name, "America/New_York")
 
       # Now update it with a new installation status
       payload =
@@ -89,6 +91,23 @@ defmodule PhoenixStarterKitWeb.PeekPro.WebhookControllerTest do
       assert response(conn, 200) == "Partner Test Partner updated successfully."
       partner = Partners.get_partner_by_external_id(external_refid)
       assert partner.timezone == "America/New_York"
+    end
+
+    test "uses explicit platform from payload when provided", %{conn: conn, partner: partner} do
+      PhoenixStarterKit.Repo.delete!(partner)
+      external_refid = "external-#{System.unique_integer()}"
+      name = "Test Partner"
+      install_id = "install-#{System.unique_integer()}"
+
+      payload =
+        peek_pro_installation_webhook_payload(external_refid, name, install_id)
+        |> put_in(["account", "platform"], "acme")
+
+      conn = post(conn, ~p"/peek-pro/api/on-installation-status-change", payload)
+
+      assert response(conn, 200) == "Partner Test Partner updated successfully."
+      partner = Partners.get_partner_by_external_id(external_refid)
+      assert partner.platform == :acme
     end
   end
 
