@@ -94,7 +94,8 @@ Provides health check and usage metrics:
 │    Partner      │
 ├─────────────────┤
 │ id (UUID)       │
-│ peek_install_id │◄──── Unique identifier from Peek Pro
+│ peek_install_id │◄──── Unique identifier from Registry
+│ platform        │◄──── Enum: peek | acme | cng
 │ is_test         │
 │ peek_pro_inst...│◄──── Embedded: installation status, timestamps
 └─────────────────┘

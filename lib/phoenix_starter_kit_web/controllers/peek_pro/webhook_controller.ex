@@ -30,20 +30,26 @@ defmodule PhoenixStarterKitWeb.PeekPro.WebhookController do
 
   defp do_upsert_partner!(raw_params) do
     %{
-      "account" => %{
-        "id" => external_refid,
-        "name" => name,
-        "is_test" => is_test,
-        "timezone" => timezone
-      },
+      "account" =>
+        %{
+          "id" => external_refid,
+          "name" => name,
+          "is_test" => is_test,
+          "timezone" => timezone
+        } = account,
       "display_version" => display_version,
       "install_id" => install_id,
       "modified_by" => %{},
       "status" => status
     } = raw_params
 
+    # Old registry isn't sending a platform, new one is. Default to peek as old
+    # registry apps are only peek.
+    platform = Map.get(account, "platform", "peek")
+
     # 1. Ensure we have a partner in our DB; first-time install will insert.
-    {:ok, partner} = Partners.upsert_for_peek_pro_installation(external_refid, name, timezone)
+    {:ok, partner} =
+      Partners.upsert_for_peek_pro_installation({external_refid, platform}, name, timezone)
 
     # 2. Ensure it matches the state we just received
     {:ok, partner} =
