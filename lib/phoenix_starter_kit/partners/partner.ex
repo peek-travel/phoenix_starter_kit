@@ -16,6 +16,7 @@ defmodule PhoenixStarterKit.Partners.Partner do
     field :peek_pro_installation_id, :string
     field :is_test, :boolean, default: false
     field :timezone, :string
+    field :platform, Ecto.Enum, values: [:peek, :acme, :cng], default: :peek
 
     embeds_one :peek_pro_installation, PeekProInstallation,
       on_replace: :delete,
@@ -42,9 +43,9 @@ defmodule PhoenixStarterKit.Partners.Partner do
   @doc false
   def changeset(partner, attrs) do
     partner
-    |> cast(attrs, [:name, :external_refid, :peek_pro_installation_id, :is_test, :timezone])
+    |> cast(attrs, [:name, :external_refid, :peek_pro_installation_id, :is_test, :timezone, :platform])
     |> cast_embed(:peek_pro_installation, with: &peek_pro_installation_changeset/2)
-    |> validate_required([:name, :external_refid])
+    |> validate_required([:name, :external_refid, :platform])
     |> validate_timezone()
   end
 

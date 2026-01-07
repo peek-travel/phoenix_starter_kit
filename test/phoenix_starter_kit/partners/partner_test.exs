@@ -7,7 +7,11 @@ defmodule PhoenixStarterKit.Partners.PartnerTest do
   describe "changeset/2" do
     test "validates required fields" do
       changeset = Partner.changeset(%Partner{}, %{})
-      assert %{name: ["can't be blank"], external_refid: ["can't be blank"]} = errors_on(changeset)
+
+      assert %{
+               name: ["can't be blank"],
+               external_refid: ["can't be blank"]
+             } = errors_on(changeset)
     end
 
     test "validates with valid attributes" do
@@ -15,7 +19,8 @@ defmodule PhoenixStarterKit.Partners.PartnerTest do
         name: "Test Partner",
         external_refid: "external-123",
         peek_pro_installation_id: "install-123",
-        is_test: false
+        is_test: false,
+        platform: :peek
       }
 
       changeset = Partner.changeset(%Partner{}, valid_attrs)

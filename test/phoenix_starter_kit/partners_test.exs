@@ -35,7 +35,8 @@ defmodule PhoenixStarterKit.PartnersTest do
         external_refid: "external-123",
         peek_pro_installation_id: "install-123",
         is_test: false,
-        timezone: "America/Los_Angeles"
+        timezone: "America/Los_Angeles",
+        platform: :peek
       }
 
       assert {:ok, %Partner{} = partner} = Partners.create_partner(valid_attrs)
@@ -51,7 +52,13 @@ defmodule PhoenixStarterKit.PartnersTest do
     end
 
     test "create_partner/1 with invalid timezone returns error changeset" do
-      invalid_attrs = %{name: "Test Partner", external_refid: "external-123", timezone: "invalid"}
+      invalid_attrs = %{
+        name: "Test Partner",
+        external_refid: "external-123",
+        timezone: "invalid",
+        platform: :peek
+      }
+
       assert {:error, %Ecto.Changeset{}} = Partners.create_partner(invalid_attrs)
     end
 
@@ -144,14 +151,17 @@ defmodule PhoenixStarterKit.PartnersTest do
       name = "Test Partner"
       timezone = "America/Los_Angeles"
 
-      assert {:ok, partner} = Partners.upsert_for_peek_pro_installation(external_refid, name, timezone)
+      assert {:ok, partner} =
+               Partners.upsert_for_peek_pro_installation({external_refid, :peek}, name, timezone)
+
       assert partner.name == name
       assert partner.external_refid == external_refid
       assert partner.timezone == timezone
+      assert partner.platform == :peek
 
       # Should return the same partner on subsequent calls
       assert {:ok, same_partner} =
-               Partners.upsert_for_peek_pro_installation(external_refid, "New Name", timezone)
+               Partners.upsert_for_peek_pro_installation({external_refid, :peek}, "New Name", timezone)
 
       assert same_partner.id == partner.id
     end
