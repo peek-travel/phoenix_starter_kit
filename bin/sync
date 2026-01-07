@@ -103,7 +103,7 @@ send_request() {
     FINAL_URL="$FINAL_URL&allow-prod=true"
   fi
 
-	  log_debug "Sending POST request to $FINAL_URL"
+  log_debug "Sending POST request to $FINAL_URL"
 
   set +e
   RESPONSE=$(curl --silent --show-error --write-out "\nHTTP_STATUS:%{http_code}" \
@@ -116,14 +116,14 @@ send_request() {
   CURL_EXIT=$?
   set -e
 
-	  if [ "$DEBUG" = true ]; then
-	    echo "📥 Raw HTTP response (including HTTP_STATUS marker):"
-	    echo "$RESPONSE"
-	    echo
-	  fi
+  if [ "$DEBUG" = true ]; then
+    echo "📥 Raw HTTP response (including HTTP_STATUS marker):"
+    echo "$RESPONSE"
+    echo
+  fi
 
-	  HTTP_STATUS=$(echo "$RESPONSE" | sed -n 's/.*HTTP_STATUS://p')
-	  RESPONSE_BODY=$(echo "$RESPONSE" | sed '/HTTP_STATUS:/d')
+  HTTP_STATUS=$(echo "$RESPONSE" | sed -n 's/.*HTTP_STATUS://p')
+  RESPONSE_BODY=$(echo "$RESPONSE" | sed '/HTTP_STATUS:/d')
 }
 
 # Initial request
