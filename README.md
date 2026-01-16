@@ -318,3 +318,42 @@ mix deps.unlock peek_app_sdk
 rm -rf deps/peek_app_sdk _build
 mix deps.get
 ```
+
+### Generators need required partner_ids on models (`phx.gen.live`)
+
+The routes you put the generations into have auth. This means you have to log in
+to use them. The tests do not log in. All you have to do is add
+`register_and_log_in_partner_user` to the `setup` section of the tests. For example:
+
+```elixir
+  describe "SettingsLive" do
+    setup [:register_and_log_in_partner_user]
+
+    test "It works!"
+    end
+  end
+```
+
+Generated schemas might not include `partner_id` in the cast section of
+changeset. You have to add it manually if you are seeing changeset errors.
+
+You have to always set a partner id when creating records both in fixtures and
+in your actual code (which will be the logged in partner)
+
+For fixtures: 
+At the top of the fixture function:
+
+```elixir
+    attrs = Map.put_new_lazy(attrs, :partner_id, fn -> PhoenixStarterKit.PartnersFixtures.partner_fixture().id end)
+```
+
+This will fix everything using the factories, but there are also test that test
+the context functions, so you have to patch those failures as well.
+
+Finally, in the actual code you have to make sure you are setting the partner_id
+when creating records. For example, in the `save_record` function of the
+`RecordLive.FormComponent` you would add the following:
+```elixir
+  defp save_record(socket, :new, record_params) do
+    record_params = Map.put(record_params, "partner_id", socket.assigns.current_partner_user.partner.id)
+```

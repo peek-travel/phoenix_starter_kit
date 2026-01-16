@@ -1,4 +1,5 @@
 #!/bin/bash
+mix deps.get
 env MIX_ENV=test mix ecto.reset
 mix format
 mix credo

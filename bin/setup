@@ -131,6 +131,24 @@ find . -type f -not -path "*/\.*" -not -path "*/deps/*" -not -path "*/node_modul
   fi
 done
 
+# .env.example is a dotfile and excluded from the find above; update it explicitly
+if [ -f ".env.example" ]; then
+  echo "  Processing: .env.example"
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    sed -i '' "s/PHOENIX_STARTER_KIT/$UPPER_SNAKE_CASE/g" .env.example
+    sed -i '' "s/Phoenix Starter Kit/$FRIENDLY_NAME/g" .env.example
+    sed -i '' "s/PhoenixStarterKit/$PASCAL_CASE/g" .env.example
+    sed -i '' "s/phoenix_starter_kit/$SNAKE_CASE/g" .env.example
+    sed -i '' "s/phoenix-starter-kit/$DASH_CASE/g" .env.example
+  else
+    sed -i "s/PHOENIX_STARTER_KIT/$UPPER_SNAKE_CASE/g" .env.example
+    sed -i "s/Phoenix Starter Kit/$FRIENDLY_NAME/g" .env.example
+    sed -i "s/PhoenixStarterKit/$PASCAL_CASE/g" .env.example
+    sed -i "s/phoenix_starter_kit/$SNAKE_CASE/g" .env.example
+    sed -i "s/phoenix-starter-kit/$DASH_CASE/g" .env.example
+  fi
+fi
+
 # Rename files
 print_status "Renaming files..."
 find . -type f \( -name "*phoenix_starter_kit*" -o -name "*phoenix-starter-kit*" \) -not -path "*/\.*" -not -path "*/deps/*" -not -path "*/node_modules/*" -not -path "*/_build/*" 2>/dev/null | while read file; do
