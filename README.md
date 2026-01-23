@@ -136,7 +136,7 @@ Erlang/OTP 28 [erts-16.0.1] [source] [64-bit] [smp:14:14] [ds:14:14:10] [async-t
 
 [info] Running TestPeekAppWeb.Endpoint with Bandit 1.8.0 at 0.0.0.0:4000 (http)
 [info] Access TestPeekAppWeb.Endpoint at https://extravagant-salted-cornstalk.ngrok-free.dev
-Interactive Elixir (1.18.4) - press Ctrl+C to exit (type h() ENTER for help)
+Interactive Elixir (1.19.5) - press Ctrl+C to exit (type h() ENTER for help)
 [watch] build finished, watching for changes...
 [watch] build finished, watching for changes...
 /*! 🌼 daisyUI 5.0.8 */
