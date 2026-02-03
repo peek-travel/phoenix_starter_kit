@@ -1,0 +1,43 @@
+## Default domain translations (English).
+##
+## Base translations - platform .po files can override these.
+
+## Common Actions
+msgid "common.save"
+msgstr "Save"
+
+msgid "common.cancel"
+msgstr "Cancel"
+
+msgid "common.delete"
+msgstr "Delete"
+
+msgid "common.edit"
+msgstr "Edit"
+
+msgid "common.create"
+msgstr "Create"
+
+msgid "common.saving"
+msgstr "Saving..."
+
+## Time Units
+msgid "time.minutes"
+msgstr "Minutes"
+
+msgid "time.hours"
+msgstr "Hours"
+
+msgid "time.days"
+msgstr "Days"
+
+## Flash Messages
+msgid "flash.saved_successfully"
+msgstr "Saved successfully"
+
+msgid "flash.deleted_successfully"
+msgstr "Deleted successfully"
+
+msgid "flash.error_occurred"
+msgstr "An error occurred"
+

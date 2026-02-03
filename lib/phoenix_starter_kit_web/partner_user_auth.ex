@@ -13,6 +13,7 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
 
   alias PhoenixStarterKit.Partners
   alias PhoenixStarterKit.Repo
+  alias PhoenixStarterKitWeb.PlatformGettext
 
   @doc """
   Logs the partner_user in.
@@ -137,8 +138,12 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
     })
   end
 
-  # Helper to return conn with partner_user assignment
+  # Helper to return conn with partner_user assignment and set platform
   defp return_with_partner_user(conn, partner_user) do
+    if partner_user && partner_user.partner do
+      PlatformGettext.put_platform(partner_user.partner.platform)
+    end
+
     assign(conn, :current_partner_user, partner_user)
   end
 
@@ -205,10 +210,19 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
     socket =
       Phoenix.Component.assign_new(socket, :current_partner_user, fn ->
         if partner_user_token = session["partner_user_token"] do
-          partner_user_token
-          |> Partners.get_partner_user_by_session_token(session["current_partner_id"])
+          Partners.get_partner_user_by_session_token(
+            partner_user_token,
+            session["current_partner_id"]
+          )
         end
       end)
+
+    # Set platform after assign_new so it always runs in the current process
+    if partner_user = socket.assigns[:current_partner_user] do
+      if partner_user.partner do
+        PlatformGettext.put_platform(partner_user.partner.platform)
+      end
+    end
 
     safe_on_mount(socket)
   end

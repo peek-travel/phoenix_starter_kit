@@ -1,0 +1,12 @@
+## Acme platform translations (English).
+##
+## Only override specific translations - all others fall back to default.po
+
+## Example: Acme uses different terminology
+msgid "common.save"
+msgstr "Submit"
+
+## Example with bindings - to test t/2 platform override
+msgid "flash.saved_successfully"
+msgstr "Event saved successfully"
+
