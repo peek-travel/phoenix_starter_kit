@@ -1,0 +1,50 @@
+## Default domain translations template.
+##
+## Use simple keys like "section.field_name" for organization.
+## Platform-specific overrides go in {platform}.po files (optional).
+##
+## To add translations:
+## 1. Add msgid here with empty msgstr
+## 2. Run `mix gettext.merge priv/gettext`
+## 3. Add translations in default.po (and platform .po files if needed)
+
+## Example keys - replace with your actual translation keys
+
+msgid "common.save"
+msgstr ""
+
+msgid "common.cancel"
+msgstr ""
+
+msgid "common.delete"
+msgstr ""
+
+msgid "common.edit"
+msgstr ""
+
+msgid "common.create"
+msgstr ""
+
+msgid "common.saving"
+msgstr ""
+
+## Time Units
+msgid "time.minutes"
+msgstr ""
+
+msgid "time.hours"
+msgstr ""
+
+msgid "time.days"
+msgstr ""
+
+## Flash Messages
+msgid "flash.saved_successfully"
+msgstr ""
+
+msgid "flash.deleted_successfully"
+msgstr ""
+
+msgid "flash.error_occurred"
+msgstr ""
+
