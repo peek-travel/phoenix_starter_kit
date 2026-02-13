@@ -22,7 +22,7 @@ defmodule PhoenixStarterKitWeb.Plugs.SetCurrentPartner do
   @impl true
   def call(%{assigns: %{peek_install_id: peek_install_id}} = conn, _opts)
       when is_binary(peek_install_id) do
-    partner = Partners.get_partner_by_peek_install_id(peek_install_id)
+    partner = Partners.get_partner_by_app_registry_install_refid(peek_install_id)
 
     if partner, do: PlatformGettext.put_platform(partner.platform)
 

@@ -6,7 +6,10 @@ defmodule PhoenixStarterKitWeb.PeekPro.WebhookControllerTest do
   def authenticate_peek_pro_request(ctx) do
     %{conn: conn} = ctx
     partner = PhoenixStarterKit.PartnersFixtures.partner_fixture()
-    conn = put_req_header(conn, "x-peek-auth", "Bearer #{PeekAppSDK.Token.new_for_app_installation!(partner.peek_pro_installation_id)}")
+
+    conn =
+      put_req_header(conn, "x-peek-auth", "Bearer #{PeekAppSDK.Token.new_for_app_installation!(partner.app_registry_installation_refid)}")
+
     %{conn: conn, partner: partner}
   end
 
@@ -27,7 +30,7 @@ defmodule PhoenixStarterKitWeb.PeekPro.WebhookControllerTest do
       partner = Partners.get_partner_by_external_id(external_refid)
       assert partner.name == name
       assert partner.external_refid == external_refid
-      assert partner.peek_pro_installation_id == install_id
+      assert partner.app_registry_installation_refid == install_id
       assert partner.peek_pro_installation.status == :installed
       assert partner.peek_pro_installation.display_version == "1.0.0"
       assert partner.peek_pro_installation.install_id == install_id

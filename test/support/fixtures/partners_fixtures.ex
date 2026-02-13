@@ -8,7 +8,7 @@ defmodule PhoenixStarterKit.PartnersFixtures do
   alias PhoenixStarterKit.Partners.PartnerUser
 
   def unique_external_refid, do: "external-#{System.unique_integer()}"
-  def unique_peek_pro_installation_id, do: "install-#{System.unique_integer()}"
+  def unique_app_registry_installation_refid, do: "install-#{System.unique_integer()}"
   def unique_partner_user_email, do: "partner_user#{System.unique_integer()}@example.com"
 
   def valid_partner_attributes(attrs \\ %{}) do
@@ -17,7 +17,7 @@ defmodule PhoenixStarterKit.PartnersFixtures do
     |> Enum.into(%{
       name: "Partner #{System.unique_integer()}",
       external_refid: unique_external_refid(),
-      peek_pro_installation_id: unique_peek_pro_installation_id(),
+      app_registry_installation_refid: unique_app_registry_installation_refid(),
       is_test: false,
       timezone: "America/Los_Angeles",
       platform: :peek
@@ -39,7 +39,7 @@ defmodule PhoenixStarterKit.PartnersFixtures do
     peek_pro_installation = %{
       status: :installed,
       display_version: "1.0.0",
-      install_id: partner.peek_pro_installation_id
+      install_id: partner.app_registry_installation_refid
     }
 
     {:ok, partner} =
@@ -96,7 +96,7 @@ defmodule PhoenixStarterKit.PartnersFixtures do
     Map.replace!(attrs, :peek_pro_installation, %{
       status: :installed,
       display_version: "1.0.0",
-      install_id: unique_peek_pro_installation_id()
+      install_id: unique_app_registry_installation_refid()
     })
   end
 
@@ -104,7 +104,7 @@ defmodule PhoenixStarterKit.PartnersFixtures do
     Map.replace!(attrs, :peek_pro_installation, %{
       status: :uninstalled,
       display_version: "1.0.0",
-      install_id: unique_peek_pro_installation_id()
+      install_id: unique_app_registry_installation_refid()
     })
   end
 
