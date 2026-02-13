@@ -59,21 +59,21 @@ defmodule PhoenixStarterKit.Partners do
   end
 
   @doc """
-  Gets a single partner by peek_pro_installation_id.
+  Gets a single partner by app_registry_installation_refid.
 
   Returns nil if the Partner does not exist.
 
   ## Examples
 
-      iex> get_partner_by_peek_install_id("install-123")
+      iex> get_partner_by_app_registry_install_refid("install-123")
       %Partner{}
 
-      iex> get_partner_by_peek_install_id("non-existent")
+      iex> get_partner_by_app_registry_install_refid("non-existent")
       nil
 
   """
-  def get_partner_by_peek_install_id(peek_install_id) do
-    Repo.get_by(Partner, peek_pro_installation_id: peek_install_id)
+  def get_partner_by_app_registry_install_refid(install_refid) do
+    Repo.get_by(Partner, app_registry_installation_refid: install_refid)
   end
 
   @doc """
