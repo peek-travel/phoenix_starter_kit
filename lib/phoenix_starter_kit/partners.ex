@@ -59,21 +59,21 @@ defmodule PhoenixStarterKit.Partners do
   end
 
   @doc """
-  Gets a single partner by peek_pro_installation_id.
+  Gets a single partner by app_registry_installation_refid.
 
   Returns nil if the Partner does not exist.
 
   ## Examples
 
-      iex> get_partner_by_peek_install_id("install-123")
+      iex> get_partner_by_app_registry_install_refid("install-123")
       %Partner{}
 
-      iex> get_partner_by_peek_install_id("non-existent")
+      iex> get_partner_by_app_registry_install_refid("non-existent")
       nil
 
   """
-  def get_partner_by_peek_install_id(peek_install_id) do
-    Repo.get_by(Partner, peek_pro_installation_id: peek_install_id)
+  def get_partner_by_app_registry_install_refid(install_refid) do
+    Repo.get_by(Partner, app_registry_installation_refid: install_refid)
   end
 
   @doc """
@@ -142,26 +142,23 @@ defmodule PhoenixStarterKit.Partners do
   end
 
   @doc """
-  Creates or updates a partner for a PeekPro installation.
+  Creates or updates a partner for an App Registry installation.
 
-  If a partner with the given external_refid exists, returns it.
-  Otherwise, creates a new partner with the given external_refid, name, and platform.
+  If a partner with the given install_id exists, returns it.
+  Otherwise, creates a new partner with the given attributes.
 
   ## Examples
 
-      iex> upsert_for_peek_pro_installation({"external-123", :peek}, "Test Partner", "America/Los_Angeles")
+      iex> upsert_for_app_registry_installation("install-123", %{external_refid: "ext-123", platform: :peek, name: "Test", timezone: "America/Los_Angeles"})
       {:ok, %Partner{}}
 
   """
-  def upsert_for_peek_pro_installation({external_refid, platform}, name, timezone) do
-    case get_partner_by_external_id(external_refid) do
+  def upsert_for_app_registry_installation(install_id, attrs) do
+    case get_partner_by_app_registry_install_refid(install_id) do
       nil ->
-        create_partner(%{
-          name: name,
-          external_refid: external_refid,
-          timezone: timezone,
-          platform: platform
-        })
+        attrs
+        |> Map.put(:app_registry_installation_refid, install_id)
+        |> create_partner()
 
       partner ->
         {:ok, partner}
