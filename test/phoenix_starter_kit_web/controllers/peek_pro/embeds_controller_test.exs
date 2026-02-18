@@ -48,10 +48,12 @@ defmodule PhoenixStarterKitWeb.PeekPro.EmbedsControllerTest do
       install_id = "install-#{System.unique_integer()}"
 
       {:ok, partner} =
-        PhoenixStarterKit.Partners.upsert_for_peek_pro_installation({external_refid, :peek}, name, "America/New_York")
-
-      {:ok, partner} =
-        PhoenixStarterKit.Partners.update_partner(partner, %{peek_pro_installation_id: install_id})
+        PhoenixStarterKit.Partners.upsert_for_app_registry_installation(install_id, %{
+          external_refid: external_refid,
+          platform: :peek,
+          name: name,
+          timezone: "America/New_York"
+        })
 
       account_user = peek_account_user_fixture()
 
@@ -92,7 +94,7 @@ defmodule PhoenixStarterKitWeb.PeekPro.EmbedsControllerTest do
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
         )
         |> post(~p"/peek-pro/settings", %{
-          "peek-auth" => PeekAppSDK.Token.new_for_app_installation!(partner.peek_pro_installation_id, account_user)
+          "peek-auth" => PeekAppSDK.Token.new_for_app_installation!(partner.app_registry_installation_refid, account_user)
         })
 
       assert response(conn, 200) =~ "We Love Safari, But…"
@@ -125,7 +127,7 @@ defmodule PhoenixStarterKitWeb.PeekPro.EmbedsControllerTest do
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         )
         |> post(~p"/peek-pro/settings", %{
-          "peek-auth" => PeekAppSDK.Token.new_for_app_installation!(partner.peek_pro_installation_id, account_user)
+          "peek-auth" => PeekAppSDK.Token.new_for_app_installation!(partner.app_registry_installation_refid, account_user)
         })
 
       assert redirected_to(conn) == ~p"/settings"
@@ -150,7 +152,7 @@ defmodule PhoenixStarterKitWeb.PeekPro.EmbedsControllerTest do
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
         )
         |> post(~p"/peek-pro/settings?force_proceed=true", %{
-          "peek-auth" => PeekAppSDK.Token.new_for_app_installation!(partner.peek_pro_installation_id, account_user)
+          "peek-auth" => PeekAppSDK.Token.new_for_app_installation!(partner.app_registry_installation_refid, account_user)
         })
 
       assert redirected_to(conn) == ~p"/settings"

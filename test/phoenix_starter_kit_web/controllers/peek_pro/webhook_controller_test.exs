@@ -6,7 +6,10 @@ defmodule PhoenixStarterKitWeb.PeekPro.WebhookControllerTest do
   def authenticate_peek_pro_request(ctx) do
     %{conn: conn} = ctx
     partner = PhoenixStarterKit.PartnersFixtures.partner_fixture()
-    conn = put_req_header(conn, "x-peek-auth", "Bearer #{PeekAppSDK.Token.new_for_app_installation!(partner.peek_pro_installation_id)}")
+
+    conn =
+      put_req_header(conn, "x-peek-auth", "Bearer #{PeekAppSDK.Token.new_for_app_installation!(partner.app_registry_installation_refid)}")
+
     %{conn: conn, partner: partner}
   end
 
@@ -27,7 +30,7 @@ defmodule PhoenixStarterKitWeb.PeekPro.WebhookControllerTest do
       partner = Partners.get_partner_by_external_id(external_refid)
       assert partner.name == name
       assert partner.external_refid == external_refid
-      assert partner.peek_pro_installation_id == install_id
+      assert partner.app_registry_installation_refid == install_id
       assert partner.peek_pro_installation.status == :installed
       assert partner.peek_pro_installation.display_version == "1.0.0"
       assert partner.peek_pro_installation.install_id == install_id
@@ -41,7 +44,12 @@ defmodule PhoenixStarterKitWeb.PeekPro.WebhookControllerTest do
       install_id = "install-#{System.unique_integer()}"
 
       {:ok, partner} =
-        Partners.upsert_for_peek_pro_installation({external_refid, :peek}, name, "America/New_York")
+        Partners.upsert_for_app_registry_installation(install_id, %{
+          external_refid: external_refid,
+          platform: :peek,
+          name: name,
+          timezone: "America/New_York"
+        })
 
       # Now update it with a new installation status
       payload =
@@ -56,7 +64,7 @@ defmodule PhoenixStarterKitWeb.PeekPro.WebhookControllerTest do
       conn = post(conn, ~p"/peek-pro/api/on-installation-status-change", payload)
 
       assert response(conn, 200) == "Partner Test Partner updated successfully."
-      updated_partner = Partners.get_partner_by_external_id(external_refid)
+      updated_partner = Partners.get_partner_by_app_registry_install_refid(install_id)
       assert updated_partner.id == partner.id
       assert updated_partner.peek_pro_installation.status == :uninstalled
       assert updated_partner.peek_pro_installation.display_version == "2.0.0"

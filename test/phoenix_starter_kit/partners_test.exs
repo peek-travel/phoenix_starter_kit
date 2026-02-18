@@ -24,16 +24,16 @@ defmodule PhoenixStarterKit.PartnersTest do
       assert Partners.get_partner_by_external_id(partner.external_refid) == partner
     end
 
-    test "get_partner_by_peek_install_id/1 returns the partner with given peek_pro_installation_id" do
+    test "get_partner_by_app_registry_install_refid/1 returns the partner with given app_registry_installation_refid" do
       partner = partner_fixture()
-      assert Partners.get_partner_by_peek_install_id(partner.peek_pro_installation_id) == partner
+      assert Partners.get_partner_by_app_registry_install_refid(partner.app_registry_installation_refid) == partner
     end
 
     test "create_partner/1 with valid data creates a partner" do
       valid_attrs = %{
         name: "Test Partner",
         external_refid: "external-123",
-        peek_pro_installation_id: "install-123",
+        app_registry_installation_refid: "install-123",
         is_test: false,
         timezone: "America/Los_Angeles",
         platform: :peek
@@ -42,7 +42,7 @@ defmodule PhoenixStarterKit.PartnersTest do
       assert {:ok, %Partner{} = partner} = Partners.create_partner(valid_attrs)
       assert partner.name == "Test Partner"
       assert partner.external_refid == "external-123"
-      assert partner.peek_pro_installation_id == "install-123"
+      assert partner.app_registry_installation_refid == "install-123"
       assert partner.is_test == false
     end
 
@@ -145,23 +145,28 @@ defmodule PhoenixStarterKit.PartnersTest do
     end
   end
 
-  describe "peek pro integration" do
-    test "upsert_for_peek_pro_installation/3 creates a partner and partner user if they don't exist" do
-      external_refid = "external-123"
-      name = "Test Partner"
-      timezone = "America/Los_Angeles"
+  describe "app registry integration" do
+    test "upsert_for_app_registry_installation/2 creates a partner if it doesn't exist" do
+      install_id = "install-123"
 
-      assert {:ok, partner} =
-               Partners.upsert_for_peek_pro_installation({external_refid, :peek}, name, timezone)
+      attrs = %{
+        external_refid: "external-123",
+        platform: :peek,
+        name: "Test Partner",
+        timezone: "America/Los_Angeles"
+      }
 
-      assert partner.name == name
-      assert partner.external_refid == external_refid
-      assert partner.timezone == timezone
+      assert {:ok, partner} = Partners.upsert_for_app_registry_installation(install_id, attrs)
+
+      assert partner.name == "Test Partner"
+      assert partner.external_refid == "external-123"
+      assert partner.timezone == "America/Los_Angeles"
       assert partner.platform == :peek
+      assert partner.app_registry_installation_refid == install_id
 
       # Should return the same partner on subsequent calls
       assert {:ok, same_partner} =
-               Partners.upsert_for_peek_pro_installation({external_refid, :peek}, "New Name", timezone)
+               Partners.upsert_for_app_registry_installation(install_id, %{attrs | name: "New Name"})
 
       assert same_partner.id == partner.id
     end

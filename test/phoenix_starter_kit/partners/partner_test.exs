@@ -18,7 +18,7 @@ defmodule PhoenixStarterKit.Partners.PartnerTest do
       valid_attrs = %{
         name: "Test Partner",
         external_refid: "external-123",
-        peek_pro_installation_id: "install-123",
+        app_registry_installation_refid: "install-123",
         is_test: false,
         platform: :peek
       }

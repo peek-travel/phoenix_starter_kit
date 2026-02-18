@@ -49,12 +49,16 @@ defmodule PhoenixStarterKitWeb.PeekPro.WebhookController do
 
     # 1. Ensure we have a partner in our DB; first-time install will insert.
     {:ok, partner} =
-      Partners.upsert_for_peek_pro_installation({external_refid, platform}, name, timezone)
+      Partners.upsert_for_app_registry_installation(install_id, %{
+        external_refid: external_refid,
+        platform: platform,
+        name: name,
+        timezone: timezone
+      })
 
     # 2. Ensure it matches the state we just received
     {:ok, partner} =
       Partners.update_partner(partner, %{
-        peek_pro_installation_id: install_id,
         peek_pro_installation: %{
           status: status,
           display_version: display_version,
@@ -93,7 +97,7 @@ defmodule PhoenixStarterKitWeb.PeekPro.WebhookController do
       }
     } = conn
 
-    case Partners.get_partner_by_peek_install_id(peek_install_id) do
+    case Partners.get_partner_by_app_registry_install_refid(peek_install_id) do
       nil ->
         send_resp(conn, :ok, "Unknown install ID")
 
