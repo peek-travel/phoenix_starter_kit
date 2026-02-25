@@ -91,6 +91,7 @@ if config_env() == :prod do
   if System.get_env("SENTRY_DSN") do
     config :sentry,
       dsn: System.fetch_env!("SENTRY_DSN"),
+      environment_name: System.get_env("SENTRY_ENVIRONMENT", "production"),
       enable_source_code_context: true,
       root_source_code_paths: [File.cwd!()]
   end
