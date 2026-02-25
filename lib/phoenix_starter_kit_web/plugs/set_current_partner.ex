@@ -24,7 +24,10 @@ defmodule PhoenixStarterKitWeb.Plugs.SetCurrentPartner do
       when is_binary(peek_install_id) do
     partner = Partners.get_partner_by_app_registry_install_refid(peek_install_id)
 
-    if partner, do: PlatformGettext.put_platform(partner.platform)
+    if partner do
+      PlatformGettext.put_platform(partner.platform)
+      set_sentry_context(partner)
+    end
 
     conn
     |> assign(:current_partner, partner)
@@ -35,10 +38,20 @@ defmodule PhoenixStarterKitWeb.Plugs.SetCurrentPartner do
     if current_partner_id = get_session(conn, "current_partner_id") do
       partner = Partners.get_partner!(current_partner_id)
       PlatformGettext.put_platform(partner.platform)
+      set_sentry_context(partner)
 
       assign(conn, :current_partner, partner)
     else
       assign(conn, :current_partner, nil)
     end
+  end
+
+  defp set_sentry_context(partner) do
+    Sentry.Context.set_extra_context(%{
+      partner_id: partner.id,
+      partner_name: partner.name,
+      partner_platform: partner.platform,
+      partner_external_refid: partner.external_refid
+    })
   end
 end
