@@ -83,7 +83,7 @@ defmodule PhoenixStarterKitWeb.Registry.WebhookController do
     PeekAppSDK.Metrics.track_install(partner)
   end
 
-  defp parse_api_config(%{"api_config" => %{"url" => url}}), do: %{url: url}
+  defp parse_api_config(%{"api" => %{"url" => url}}), do: %{url: url}
   defp parse_api_config(_), do: nil
 
   @doc """
