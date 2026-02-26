@@ -180,12 +180,12 @@ defmodule PhoenixStarterKitWeb.Registry.WebhookControllerTest do
         "is_test" => false,
         "platform" => platform
       },
-      "api_config" => %{
+      "api" => %{
         "url" => api_url
       },
       "display_version" => "1.0.0",
       "install_id" => install_id,
-      "modified_by" => %{},
+      "modified_by" => %{"email" => "admin@peek.com", "name" => "Admin User"},
       "status" => "installed"
     }
   end
