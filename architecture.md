@@ -73,7 +73,7 @@ Provides health check and usage metrics:
 
 - **`:browser`**: Standard Phoenix browser pipeline with partner user auth
 - **`:api`**: JSON API endpoints
-- **`:peek_pro_api`**: Webhook endpoints from Peek Pro (authenticated via SDK)
+- **`:webhook`**: Webhook endpoints from Registry (authenticated via SDK)
 - **`:peek_pro_embed`**: Embedded iframe endpoints (authenticated via Peek Pro)
 - **`:widget_api`**: Client-side widget endpoints (optional, with CORS)
 
@@ -82,7 +82,7 @@ Provides health check and usage metrics:
 - `/` - Landing page
 - `/settings` - Partner user settings (requires auth)
 - `/peek-pro/settings` - Embedded settings page (Peek Pro iframe)
-- `/peek-pro/api/on-installation-status-change` - Installation webhook
+- `/registry/api/on-installation-status-change` - Installation webhook
 - `/peek-pro/api/on-booking-change` - Booking change webhook
 - `/health` - Health check endpoint
 - `/demo/*` - Demo CRUD functionality

@@ -1,6 +1,6 @@
-defmodule PhoenixStarterKitWeb.PeekPro.WebhookController do
+defmodule PhoenixStarterKitWeb.Registry.WebhookController do
   @moduledoc """
-  This controller handles webhooks from PeekPro.
+  This controller handles webhooks from the App Registry.
 
   It receives installation status change notifications and updates the partner
   record accordingly.
@@ -10,7 +10,7 @@ defmodule PhoenixStarterKitWeb.PeekPro.WebhookController do
   alias PhoenixStarterKit.Partners
 
   @doc """
-  Handles the installation status change webhook from PeekPro.
+  Handles the installation status change webhook from the App Registry.
 
   This webhook is sent when the installation status of the app changes.
   It updates the partner record in the database with the new status and
@@ -34,8 +34,7 @@ defmodule PhoenixStarterKitWeb.PeekPro.WebhookController do
         %{
           "id" => external_refid,
           "name" => name,
-          "is_test" => is_test,
-          "timezone" => timezone
+          "is_test" => is_test
         } = account,
       "display_version" => display_version,
       "install_id" => install_id,
@@ -43,9 +42,12 @@ defmodule PhoenixStarterKitWeb.PeekPro.WebhookController do
       "status" => status
     } = raw_params
 
-    # Old registry isn't sending a platform, new one is. Default to peek as old
-    # registry apps are only peek.
+    # Only legacy registry sends platform/timezone; new registry doesn't (yet).
     platform = Map.get(account, "platform", "peek")
+    timezone = Map.get(account, "timezone")
+
+    # Registry 2.0 sends api_config with cross-brand URL
+    api_config = parse_api_config(raw_params)
 
     # 1. Ensure we have a partner in our DB; first-time install will insert.
     {:ok, partner} =
@@ -53,7 +55,8 @@ defmodule PhoenixStarterKitWeb.PeekPro.WebhookController do
         external_refid: external_refid,
         platform: platform,
         name: name,
-        timezone: timezone
+        timezone: timezone,
+        api_config: api_config
       })
 
     # 2. Ensure it matches the state we just received
@@ -80,8 +83,11 @@ defmodule PhoenixStarterKitWeb.PeekPro.WebhookController do
     PeekAppSDK.Metrics.track_install(partner)
   end
 
+  defp parse_api_config(%{"api_config" => %{"url" => url}}), do: %{url: url}
+  defp parse_api_config(_), do: nil
+
   @doc """
-  Handles the booking change webhook from PeekPro.
+  Handles the booking change webhook from the platform.
 
   This webhook is sent when a booking is created or updated.
   It's a good place to update your local booking record or

@@ -36,7 +36,8 @@ defmodule PhoenixStarterKit.PartnersTest do
         app_registry_installation_refid: "install-123",
         is_test: false,
         timezone: "America/Los_Angeles",
-        platform: :peek
+        platform: :peek,
+        api_config: %{url: "https://api.example.com"}
       }
 
       assert {:ok, %Partner{} = partner} = Partners.create_partner(valid_attrs)
@@ -44,6 +45,7 @@ defmodule PhoenixStarterKit.PartnersTest do
       assert partner.external_refid == "external-123"
       assert partner.app_registry_installation_refid == "install-123"
       assert partner.is_test == false
+      assert partner.api_config.url == "https://api.example.com"
     end
 
     test "create_partner/1 with invalid data returns error changeset" do

@@ -18,6 +18,13 @@ defmodule PhoenixStarterKit.Partners.Partner do
     field :timezone, :string
     field :platform, Ecto.Enum, values: [:peek, :acme, :cng], default: :peek
 
+    embeds_one :api_config, ApiConfig,
+      on_replace: :delete,
+      primary_key: false do
+      @moduledoc false
+      field :url, :string
+    end
+
     embeds_one :peek_pro_installation, PeekProInstallation,
       on_replace: :delete,
       primary_key: false do
@@ -44,6 +51,7 @@ defmodule PhoenixStarterKit.Partners.Partner do
   def changeset(partner, attrs) do
     partner
     |> cast(attrs, [:name, :external_refid, :app_registry_installation_refid, :is_test, :timezone, :platform])
+    |> cast_embed(:api_config, with: &api_config_changeset/2)
     |> cast_embed(:peek_pro_installation, with: &peek_pro_installation_changeset/2)
     |> validate_required([:name, :external_refid, :platform])
     |> validate_timezone()
@@ -56,6 +64,12 @@ defmodule PhoenixStarterKit.Partners.Partner do
         {:error, _} -> [timezone: "is not a valid timezone"]
       end
     end)
+  end
+
+  @doc false
+  def api_config_changeset(record, attrs) do
+    record
+    |> cast(attrs, [:url])
   end
 
   @doc """
