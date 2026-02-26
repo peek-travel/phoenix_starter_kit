@@ -82,7 +82,7 @@ Provides health check and usage metrics:
 - `/` - Landing page
 - `/settings` - Partner user settings (requires auth)
 - `/peek-pro/settings` - Embedded settings page (Peek Pro iframe)
-- `/peek-pro/api/on-installation-status-change` - Installation webhook
+- `/registry/api/on-installation-status-change` - Installation webhook
 - `/peek-pro/api/on-booking-change` - Booking change webhook
 - `/health` - Health check endpoint
 - `/demo/*` - Demo CRUD functionality

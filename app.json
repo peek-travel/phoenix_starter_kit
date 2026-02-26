@@ -20,7 +20,7 @@
           {
             "slug": "app_registry_webhook@v1",
             "configuration": {
-              "url": "/peek-pro/api/on-installation-status-change"
+              "url": "/registry/api/on-installation-status-change"
             }
           },
           {

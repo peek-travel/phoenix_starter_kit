@@ -40,9 +40,9 @@ The web interface is designed to be embedded within the Peek Pro application usi
 
 The application exposes several API endpoints:
 
-1. **Peek Pro API Endpoints**:
+1. **Registry API Endpoints**:
 
-   - `/peek-pro/api/on-installation-status-change`: Handles app installation events
+   - `/registry/api/on-installation-status-change`: Handles app installation events
    - `/peek-pro/api/on-booking-change`: Processes booking change notifications from Peek Pro
 
 2. **Health Check Endpoint**:

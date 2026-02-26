@@ -72,10 +72,15 @@ defmodule PhoenixStarterKitWeb.Router do
     options "/your_end_point", WidgetController, :options
   end
 
-  scope "/peek-pro/api", PhoenixStarterKitWeb.PeekPro do
+  scope "/registry/api", PhoenixStarterKitWeb.Registry do
     pipe_through [:peek_pro_api]
 
     post "/on-installation-status-change", WebhookController, :on_installation_status_change
+  end
+
+  scope "/peek-pro/api", PhoenixStarterKitWeb.Registry do
+    pipe_through [:peek_pro_api]
+
     post "/on-booking-change", WebhookController, :on_booking_change
   end
 
