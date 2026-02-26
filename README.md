@@ -255,6 +255,23 @@ The `bin/` directory contains several useful scripts:
 - **`bin/check`**: Runs tests and code quality checks.
 - **`bin/sync`**: Syncs your app configuration with the Peek Pro registry.
 
+## GitHub Actions
+
+### Augment PR Review
+
+The repository includes an automated PR review workflow using Augment AI (`.github/workflows/augment-pr-review.yml`).
+
+**Setup:**
+
+1. Obtain an Augment session auth token from [Augment Code](https://www.augmentcode.com)
+2. Add it as a repository secret:
+   - Go to **Settings** → **Secrets and variables** → **Actions**
+   - Click **New repository secret**
+   - Name: `AUGMENT_SESSION_AUTH`
+   - Value: Your Augment session auth token
+
+The workflow will automatically review PRs when they are opened, synchronized, or reopened.
+
 ## Deployment
 
 The starter kit is ready for deployment to production environments. It includes:
@@ -340,7 +357,7 @@ changeset. You have to add it manually if you are seeing changeset errors.
 You have to always set a partner id when creating records both in fixtures and
 in your actual code (which will be the logged in partner)
 
-For fixtures: 
+For fixtures:
 At the top of the fixture function:
 
 ```elixir
