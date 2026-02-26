@@ -16,13 +16,13 @@ defmodule PhoenixStarterKitWeb.Registry.WebhookControllerTest do
   describe "Registry webhook - on_installation_status_change" do
     setup :authenticate_peek_pro_request
 
-    test "creates a partner when it doesn't exist", %{conn: conn, partner: partner} do
+    test "legacy registry: creates a partner", %{conn: conn, partner: partner} do
       PhoenixStarterKit.Repo.delete!(partner)
       external_refid = "external-#{System.unique_integer()}"
       name = "Test Partner"
       install_id = "install-#{System.unique_integer()}"
 
-      payload = peek_pro_installation_webhook_payload(external_refid, name, install_id)
+      payload = legacy_registry_payload(external_refid, name, install_id)
 
       conn = post(conn, ~p"/registry/api/on-installation-status-change", payload)
 
@@ -33,13 +33,15 @@ defmodule PhoenixStarterKitWeb.Registry.WebhookControllerTest do
       assert partner.peek_pro_installation.display_version == "1.0.0"
       assert partner.peek_pro_installation.install_id == install_id
       assert partner.platform == :peek
+      assert partner.timezone == "America/Los_Angeles"
+      assert partner.api_config == nil
     end
 
-    test "updates an existing partner", %{conn: conn, partner: partner} do
+    test "legacy registry: updates an existing partner", %{conn: conn, partner: partner} do
       install_id = partner.app_registry_installation_refid
 
       payload =
-        peek_pro_installation_webhook_payload(partner.external_refid, partner.name, install_id)
+        legacy_registry_payload(partner.external_refid, partner.name, install_id)
         |> put_in(["status"], "uninstalled")
         |> put_in(["display_version"], "2.0.0")
 
@@ -53,12 +55,12 @@ defmodule PhoenixStarterKitWeb.Registry.WebhookControllerTest do
       assert updated_partner.peek_pro_installation.install_id == install_id
     end
 
-    test "handles is_test flag", %{conn: conn} do
+    test "legacy registry: handles is_test flag", %{conn: conn} do
       external_refid = "external-#{System.unique_integer()}"
       name = "Test Partner"
       install_id = "install-#{System.unique_integer()}"
 
-      payload = peek_pro_installation_webhook_payload(external_refid, name, install_id)
+      payload = legacy_registry_payload(external_refid, name, install_id)
       payload = put_in(payload, ["account", "is_test"], true)
 
       conn = post(conn, ~p"/registry/api/on-installation-status-change", payload)
@@ -68,12 +70,12 @@ defmodule PhoenixStarterKitWeb.Registry.WebhookControllerTest do
       assert partner.is_test == true
     end
 
-    test "saves partner timezone from webhook payload", %{conn: conn} do
+    test "legacy registry: saves partner timezone", %{conn: conn} do
       external_refid = "external-#{System.unique_integer()}"
       name = "Test Partner"
       install_id = "install-#{System.unique_integer()}"
 
-      payload = peek_pro_installation_webhook_payload(external_refid, name, install_id)
+      payload = legacy_registry_payload(external_refid, name, install_id)
       payload = put_in(payload, ["account", "timezone"], "America/New_York")
 
       conn = post(conn, ~p"/registry/api/on-installation-status-change", payload)
@@ -83,14 +85,14 @@ defmodule PhoenixStarterKitWeb.Registry.WebhookControllerTest do
       assert partner.timezone == "America/New_York"
     end
 
-    test "uses explicit platform from payload when provided", %{conn: conn, partner: partner} do
+    test "legacy registry: uses explicit platform from payload", %{conn: conn, partner: partner} do
       PhoenixStarterKit.Repo.delete!(partner)
       external_refid = "external-#{System.unique_integer()}"
       name = "Test Partner"
       install_id = "install-#{System.unique_integer()}"
 
       payload =
-        peek_pro_installation_webhook_payload(external_refid, name, install_id)
+        legacy_registry_payload(external_refid, name, install_id)
         |> put_in(["account", "platform"], "acme")
 
       conn = post(conn, ~p"/registry/api/on-installation-status-change", payload)
@@ -100,21 +102,20 @@ defmodule PhoenixStarterKitWeb.Registry.WebhookControllerTest do
       assert partner.platform == :acme
     end
 
-    test "works without timezone in payload (new registry)", %{conn: conn, partner: partner} do
+    test "registry 2.0: creates partner with api_config", %{conn: conn, partner: partner} do
       PhoenixStarterKit.Repo.delete!(partner)
       external_refid = "external-#{System.unique_integer()}"
-      name = "Test Partner"
+      name = "Cross-Brand Partner"
       install_id = "install-#{System.unique_integer()}"
 
-      payload =
-        peek_pro_installation_webhook_payload(external_refid, name, install_id)
-        |> pop_in(["account", "timezone"])
-        |> elem(1)
+      payload = registry_2_payload(external_refid, name, install_id, api_url: "https://api.cng.example.com")
 
       conn = post(conn, ~p"/registry/api/on-installation-status-change", payload)
 
-      assert response(conn, 200) == "Partner Test Partner updated successfully."
+      assert response(conn, 200) == "Partner Cross-Brand Partner updated successfully."
       partner = Partners.get_partner_by_external_id(external_refid)
+      assert partner.name == name
+      assert partner.api_config.url == "https://api.cng.example.com"
       assert partner.timezone == nil
     end
   end
@@ -153,13 +154,34 @@ defmodule PhoenixStarterKitWeb.Registry.WebhookControllerTest do
     end
   end
 
-  defp peek_pro_installation_webhook_payload(external_refid, name, install_id) do
+  defp legacy_registry_payload(external_refid, name, install_id) do
     %{
       "account" => %{
         "id" => external_refid,
         "name" => name,
         "is_test" => false,
         "timezone" => "America/Los_Angeles"
+      },
+      "display_version" => "1.0.0",
+      "install_id" => install_id,
+      "modified_by" => %{},
+      "status" => "installed"
+    }
+  end
+
+  defp registry_2_payload(external_refid, name, install_id, opts) do
+    api_url = Keyword.get(opts, :api_url, "https://cross-brand.example.com")
+    platform = Keyword.get(opts, :platform, "peek")
+
+    %{
+      "account" => %{
+        "id" => external_refid,
+        "name" => name,
+        "is_test" => false,
+        "platform" => platform
+      },
+      "api_config" => %{
+        "url" => api_url
       },
       "display_version" => "1.0.0",
       "install_id" => install_id,

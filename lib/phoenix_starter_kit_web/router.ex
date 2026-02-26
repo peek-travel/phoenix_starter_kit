@@ -21,7 +21,7 @@ defmodule PhoenixStarterKitWeb.Router do
     plug :accepts, ["json"]
   end
 
-  pipeline :peek_pro_api do
+  pipeline :webhook do
     plug :accepts, ["json"]
     plug :set_peek_install_id
     plug :allow_peek_iframe
@@ -73,13 +73,13 @@ defmodule PhoenixStarterKitWeb.Router do
   end
 
   scope "/registry/api", PhoenixStarterKitWeb.Registry do
-    pipe_through [:peek_pro_api]
+    pipe_through [:webhook]
 
     post "/on-installation-status-change", WebhookController, :on_installation_status_change
   end
 
   scope "/peek-pro/api", PhoenixStarterKitWeb.Registry do
-    pipe_through [:peek_pro_api]
+    pipe_through [:webhook]
 
     post "/on-booking-change", WebhookController, :on_booking_change
   end

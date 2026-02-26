@@ -46,13 +46,17 @@ defmodule PhoenixStarterKitWeb.Registry.WebhookController do
     platform = Map.get(account, "platform", "peek")
     timezone = Map.get(account, "timezone")
 
+    # Registry 2.0 sends api_config with cross-brand URL
+    api_config = parse_api_config(raw_params)
+
     # 1. Ensure we have a partner in our DB; first-time install will insert.
     {:ok, partner} =
       Partners.upsert_for_app_registry_installation(install_id, %{
         external_refid: external_refid,
         platform: platform,
         name: name,
-        timezone: timezone
+        timezone: timezone,
+        api_config: api_config
       })
 
     # 2. Ensure it matches the state we just received
@@ -78,6 +82,9 @@ defmodule PhoenixStarterKitWeb.Registry.WebhookController do
   defp on_installed(partner) do
     PeekAppSDK.Metrics.track_install(partner)
   end
+
+  defp parse_api_config(%{"api_config" => %{"url" => url}}), do: %{url: url}
+  defp parse_api_config(_), do: nil
 
   @doc """
   Handles the booking change webhook from the platform.
