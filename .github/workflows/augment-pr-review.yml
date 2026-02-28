@@ -1,0 +1,98 @@
+name: Augment PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: AI PR Review with Auggie
+        id: review
+        # Using @v0 intentionally to receive latest features and improvements
+        uses: augmentcode/review-pr@v0
+        with:
+          # Requires AUGMENT_SESSION_AUTH secret configured in repository settings
+          # See: https://docs.augmentcode.com/setup/pr-review-action
+          augment_session_auth: ${{ secrets.AUGMENT_SESSION_AUTH }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          pull_number: ${{ github.event.pull_request.number }}
+          repo_name: ${{ github.repository }}
+          custom_guidelines: |
+            ## Phoenix Starter Kit Review Guidelines
+
+            ### Elixir/Phoenix Standards
+            - Prefer **pattern matching** and **multi-clause** functions over if/else
+            - Use `with` for sequential checks; include explicit `else` branches
+            - Prefer `case` over `if/cond` when matching on data shapes
+            - Use pipelines for readable transformations
+            - **NEVER** use `try/rescue` in domain code; handle errors at boundaries only (controllers, plugs, jobs)
+            - Ensure functions return `{:ok, value}` / `{:error, reason}` tuples
+
+            ### Ecto & Contexts
+            - **All DB queries must live in Context modules** - none in controllers/web layer
+            - Schemas should declare `@required_fields` and `@optional_fields` module attributes
+            - Use explicit `changeset/2` functions for inserts/updates
+            - Pattern-match on results at call sites
+
+            ### Code Quality
+            - Flag any `IO.inspect` calls in production code
+            - Check for compiler warnings
+            - Verify Credo compliance (no warnings)
+            - Ensure proper use of module attributes and constants
+            - Methods should be small and focused
+
+            ### Controllers & Web Layer
+            - Controllers must stay thin; all business logic belongs in contexts
+            - Pattern-match on `{:ok, _}` / `{:error, _}` results in controllers
+            - Verify proper use of plugs for authentication/authorization
+
+            ### Testing
+            - Verify tests exist for new business logic
+            - Tests should use fixtures/factories, not inline data creation
+            - Group tests by function using `describe "fn_name/arity" do ... end`
+            - Check that tests are meaningful, not just coverage padding
+            - Avoid test-only logic or comments in production code
+            - For HTML assertions, use `data-integration` attributes not raw pattern matching
+
+            ### Security
+            - Check for proper input validation
+            - Verify authentication/authorization on new endpoints
+            - Ensure sensitive data is not logged
+            - Review webhook signature verification
+
+            ### Architecture
+            - Ensure changes align with existing context patterns
+            - Verify routes are in appropriate pipelines (browser, api, peek_pro_api, etc.)
+            - Check that new schemas use UUID primary keys
+            - Flag changes that might impact Peek Pro integration
+
+            ### Documentation
+            - If changing module boundaries, schemas, or public APIs, verify architecture.md is updated
+
+            ### Review Style
+            - Be concise but thorough
+            - Prioritize actionable feedback
+            - Provide code suggestions where appropriate
+            - Focus on issues that matter, skip nitpicks on formatting
+        continue-on-error: true
+
+      - name: Fallback comment on failure
+        if: steps.review.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const serverUrl = '${{ github.server_url }}';
+            const repository = '${{ github.repository }}';
+            const runId = '${{ github.run_id }}';
+
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `⚠️ **Augment AI review failed**\n\nThe automatic PR review encountered an error. Please request a manual review.\n\n[View workflow logs](${serverUrl}/${repository}/actions/runs/${runId})`
+            })
