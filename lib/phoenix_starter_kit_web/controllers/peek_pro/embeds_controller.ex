@@ -5,8 +5,6 @@ defmodule PhoenixStarterKitWeb.PeekPro.EmbedsController do
   """
   use PhoenixStarterKitWeb, :controller
 
-  alias PhoenixStarterKitWeb.PartnerUserAuth
-
   def landing(%{assigns: %{current_partner: nil, peek_install_id: peek_install_id}} = conn, params) when is_binary(peek_install_id) do
     # This SHOULDN'T be needed but there could be race conditions where the
     # install webhook is delayed so we haven't setup the partner yet.
@@ -36,28 +34,18 @@ defmodule PhoenixStarterKitWeb.PeekPro.EmbedsController do
             peek_account_user: %PeekAppSDK.AccountUser{} = peek_account_user
           }
         } = conn,
-        params
+        _params
       )
       when is_binary(peek_install_id) do
-    user_agent = get_req_header(conn, "user-agent") |> List.first() || ""
-    is_safari = safari_browser?(user_agent)
-    force_proceed = Map.get(params, "force_proceed") == "true"
+    partner_user = PhoenixStarterKit.Partners.upsert_for_peek_account_user(current_partner, peek_account_user)
 
-    if is_safari and not force_proceed do
-      # Show Safari landing page with iframe detection
-      conn
-      |> fetch_session()
-      |> fetch_flash()
-      |> render(:safari_landing,
-        current_partner: current_partner,
-        peek_account_user: peek_account_user,
-        peek_auth_token: Map.get(params, "peek-auth")
-      )
-    else
-      # Normal flow - log in the user
-      partner_user = PhoenixStarterKit.Partners.upsert_for_peek_account_user(current_partner, peek_account_user)
-      PartnerUserAuth.log_in_partner_user(conn, partner_user)
-    end
+    auth_token =
+      Phoenix.Token.sign(PhoenixStarterKitWeb.Endpoint, "partner_auth", {
+        partner_user.id,
+        current_partner.id
+      })
+
+    redirect(conn, to: ~p"/settings?auth_token=#{auth_token}")
   end
 
   def landing(conn, _params) do
@@ -67,13 +55,5 @@ defmodule PhoenixStarterKitWeb.PeekPro.EmbedsController do
     |> put_root_layout(false)
     |> put_layout(false)
     |> render(:expired)
-  end
-
-  # Helper function to detect Safari browser
-  defp safari_browser?(user_agent) do
-    # Check if user agent contains Safari but not Chrome or Android
-    String.contains?(user_agent, "Safari") and
-      not String.contains?(user_agent, "Chrome") and
-      not String.contains?(user_agent, "Android")
   end
 end

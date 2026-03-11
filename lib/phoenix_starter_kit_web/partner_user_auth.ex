@@ -5,6 +5,17 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
   It provides functions for logging in and out partner users, as well as
   plugs for authenticating requests and LiveView sessions. It also handles
   setting the current partner for a partner user.
+
+  Authentication flow for iframe-embedded contexts (e.g. peek-pro app-store):
+  1. The parent app POSTs a peek-auth token to /peek-pro/settings
+  2. EmbedsController verifies the token, upserts the partner user, and
+     generates a signed Phoenix.Token containing {partner_user_id, partner_id}
+  3. The user is redirected to /settings?auth_token=<token>
+  4. `fetch_partner_user_from_auth_token` verifies the token and assigns the user
+  5. `live_session_data` embeds the auth_token into the LiveView's phx-session
+     token (serialized into the HTML), so it's available on longpoll/WebSocket
+     connect WITHOUT cookies
+  6. `on_mount` verifies the auth_token directly — no cookie session needed
   """
   use PhoenixStarterKitWeb, :verified_routes
 
@@ -14,6 +25,10 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
   alias PhoenixStarterKit.Partners
   alias PhoenixStarterKit.Repo
   alias PhoenixStarterKitWeb.PlatformGettext
+
+  # Auth token valid for 24 hours — needs to survive the full LiveView session
+  # including longpoll reconnects. Re-issued on every entry from peek-pro.
+  @auth_token_max_age 86_400
 
   @doc """
   Logs the partner_user in.
@@ -37,23 +52,7 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
     |> redirect(to: partner_user_return_to || signed_in_path(conn))
   end
 
-  # This function renews the session ID and erases the whole
-  # session to avoid fixation attacks. If there is any data
-  # in the session you may want to preserve after log in/log out,
-  # you must explicitly fetch the session data before clearing
-  # and then immediately set it after clearing, for example:
-  #
-  #     defp renew_session(conn) do
-  #       preferred_locale = get_session(conn, :preferred_locale)
-  #
-  #       conn
-  #       |> configure_session(renew: true)
-  #       |> clear_session()
-  #       |> put_session(:preferred_locale, preferred_locale)
-  #     end
-  #
   defp renew_session(conn, fields_to_save \\ []) do
-    # Store any session data you want to preserve
     fields = Map.new(fields_to_save, &{&1, get_session(conn, &1)})
 
     delete_csrf_token()
@@ -90,22 +89,72 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
   end
 
   @doc """
-  Authenticates the partner_user by looking into the session
-  and remember me token.
+  Plug that authenticates a partner user from a signed auth_token in the
+  query params. This is the entry point for iframe-based authentication
+  where third-party cookies are blocked (Safari, incognito).
+
+  Stores the auth_token in conn assigns so `live_session_data` can embed
+  it in the LiveView's phx-session token — completely bypassing cookies.
+  """
+  def fetch_partner_user_from_auth_token(conn, _opts) do
+    with token when is_binary(token) <- conn.params["auth_token"],
+         {:ok, {partner_user_id, partner_id}} <-
+           Phoenix.Token.verify(PhoenixStarterKitWeb.Endpoint, "partner_auth", token, max_age: @auth_token_max_age),
+         %{} = partner_user <- Partners.get_partner_user(partner_user_id) do
+      partner_user = Partners.set_current_partner(partner_user, partner_id)
+
+      conn
+      |> assign(:current_partner_user, partner_user)
+      |> assign(:current_partner, partner_user.partner)
+      |> assign(:auth_token, token)
+      # Persist auth_token in the session so it survives page reloads when
+      # the URL no longer contains it. In an iframe on Safari the session
+      # cookie is blocked,
+      # but LiveView handles navigation without full reloads there. When
+      # the page is opened in a new tab it becomes first-party and the
+      # cookie works normally.
+      |> put_session(:auth_token, token)
+    else
+      _ -> conn
+    end
+  end
+
+  @doc """
+  Authenticates the partner_user by looking into the session.
+  Skips if :current_partner_user is already assigned (e.g. by auth token plug).
   """
   def fetch_current_partner_user(conn, _opts) do
+    if conn.assigns[:current_partner_user] do
+      conn
+    else
+      # First try to restore from a session-persisted auth_token (set by
+      # fetch_partner_user_from_auth_token on a previous request).
+      with token when is_binary(token) <- get_session(conn, :auth_token),
+           {:ok, {partner_user_id, partner_id}} <-
+             Phoenix.Token.verify(PhoenixStarterKitWeb.Endpoint, "partner_auth", token, max_age: @auth_token_max_age),
+           %{} = partner_user <- Partners.get_partner_user(partner_user_id) do
+        partner_user = Partners.set_current_partner(partner_user, partner_id)
+        set_sentry_context(partner_user)
+
+        conn
+        |> assign(:current_partner_user, partner_user)
+        |> assign(:current_partner, partner_user.partner)
+        |> assign(:auth_token, token)
+      else
+        _ -> fetch_partner_user_from_session(conn)
+      end
+    end
+  end
+
+  defp fetch_partner_user_from_session(conn) do
     {partner_user_token, conn} = ensure_partner_user_token(conn)
     maybe_partner_id = get_session(conn, "current_partner_id")
 
     partner_user =
       partner_user_token && Partners.get_partner_user_by_session_token(partner_user_token)
 
-    # If no partner_user, return early with nil assignment
     if partner_user do
-      # Set the current partner for the partner_user
       partner_user = set_partner_for_user(partner_user, maybe_partner_id)
-
-      # Set Sentry context and return with partner_user assignment
       set_sentry_context(partner_user)
       return_with_partner_user(conn, partner_user)
     else
@@ -113,19 +162,16 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
     end
   end
 
-  # Helper to set the current partner for a partner_user
   defp set_partner_for_user(partner_user, maybe_partner_id) do
     if maybe_partner_id do
       Partners.set_current_partner(partner_user, maybe_partner_id)
     else
-      # If no current_partner_id, use the first partner
       partner_user = Repo.preload(partner_user, :partners)
       partner = partner_user.partners |> Enum.sort_by(& &1.inserted_at, :desc) |> List.first()
       Partners.set_current_partner(partner_user, partner)
     end
   end
 
-  # Helper to set Sentry context
   defp set_sentry_context(partner_user) do
     partner_name =
       if partner_user.partner,
@@ -138,7 +184,6 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
     })
   end
 
-  # Helper to return conn with partner_user assignment and set platform
   defp return_with_partner_user(conn, partner_user) do
     if partner_user && partner_user.partner do
       PlatformGettext.put_platform(partner_user.partner.platform)
@@ -153,6 +198,30 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
     else
       {nil, conn}
     end
+  end
+
+  @doc """
+  Returns session data to embed in the LiveView's phx-session token.
+
+  This is the key mechanism for cookie-free auth: the auth_token is
+  serialized into the HTML and sent back on longpoll/WebSocket connect,
+  completely bypassing the cookie-based Plug session.
+
+  Used by the `session:` option on `live_session` in the router.
+  """
+  def live_session_data(conn) do
+    auth_token = conn.assigns[:auth_token]
+    partner_user_token = get_session(conn, :partner_user_token)
+
+    %{
+      # The signed Phoenix.Token — verified directly in on_mount.
+      # This is embedded in the HTML and doesn't depend on cookies.
+      "auth_token" => auth_token,
+      # Keep session-based keys as fallback for first-party contexts
+      # where cookies work normally.
+      "partner_user_token" => partner_user_token,
+      "current_partner_id" => get_session(conn, "current_partner_id")
+    }
   end
 
   @doc """
@@ -209,11 +278,18 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
   defp mount_current_partner_user(socket, session) do
     socket =
       Phoenix.Component.assign_new(socket, :current_partner_user, fn ->
-        if partner_user_token = session["partner_user_token"] do
-          Partners.get_partner_user_by_session_token(
-            partner_user_token,
-            session["current_partner_id"]
-          )
+        cond do
+          auth_token = session["auth_token"] ->
+            verify_auth_token(auth_token)
+
+          partner_user_token = session["partner_user_token"] ->
+            Partners.get_partner_user_by_session_token(
+              partner_user_token,
+              session["current_partner_id"]
+            )
+
+          true ->
+            nil
         end
       end)
 
@@ -225,6 +301,19 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
     end
 
     safe_on_mount(socket)
+  end
+
+  defp verify_auth_token(token) do
+    case Phoenix.Token.verify(PhoenixStarterKitWeb.Endpoint, "partner_auth", token, max_age: @auth_token_max_age) do
+      {:ok, {partner_user_id, partner_id}} ->
+        case Partners.get_partner_user(partner_user_id) do
+          nil -> nil
+          partner_user -> Partners.set_current_partner(partner_user, partner_id)
+        end
+
+      _ ->
+        nil
+    end
   end
 
   defp safe_on_mount(socket) do

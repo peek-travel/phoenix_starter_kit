@@ -201,6 +201,8 @@ defmodule PhoenixStarterKit.Partners do
 
   Returns nil if the PartnerUser does not exist.
   """
+  def get_partner_user(id), do: Repo.get(PartnerUser, id)
+
   def get_partner_user_by_email(email) when is_binary(email) do
     Repo.get_by(PartnerUser, email: email)
   end
