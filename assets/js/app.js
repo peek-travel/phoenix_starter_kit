@@ -17,47 +17,101 @@
 // If you have dependencies that try to import CSS, esbuild will generate a separate `app.css` file.
 // To load it, simply add a second `<link>` to your `root.html.heex` file.
 // Include phoenix_html to handle method=PUT/DELETE in forms and buttons.
-import "phoenix_html"
+import 'phoenix_html'
 // Establish Phoenix Socket and LiveView configuration.
-import { Socket } from "phoenix"
-import { LiveSocket } from "phoenix_live_view"
-import { OdysseyHooks, addOdysseyGlobalEvents } from "peek_app_sdk/assets/js/odyssey.js"
+import { Socket } from 'phoenix'
+import { LiveSocket } from 'phoenix_live_view'
+import {
+  OdysseyHooks,
+  addOdysseyGlobalEvents
+} from 'peek_app_sdk/assets/js/odyssey.js'
 // Set up global event listeners from peek_app_sdk
-addOdysseyGlobalEvents(window);
-import topbar from "../vendor/topbar"
+addOdysseyGlobalEvents(window)
+import topbar from '../vendor/topbar'
 
-const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
-const liveSocket = new LiveSocket("/live", Socket, {
+const csrfToken = document
+  .querySelector("meta[name='csrf-token']")
+  .getAttribute('content')
+const liveSocket = new LiveSocket('/live', Socket, {
   longPollFallbackMs: 2500,
-  params: {_csrf_token: csrfToken},
+  params: { _csrf_token: csrfToken },
   hooks: {
     ...OdysseyHooks,
-    AutoClearFlash: {
-      mounted() {
-        let ignoredIDs = ["client-error", "server-error"];
-        if (ignoredIDs.includes(this.el.id)) return;
+    FormDirty: {
+      // Add this form to any <.form el to automatically prompt the user if they
+      // have unsaved changes when navigating away.
+      mounted () {
+        this.dirty = false
+        this.el.addEventListener('input', () => {
+          this.dirty = true
+        })
+        this.el.addEventListener('change', () => {
+          this.dirty = true
+        })
 
-        let hideElementAfter = 2000; // ms
-        let clearFlashAfter = hideElementAfter + 500; // ms
+        this.beforeUnloadHandler = e => {
+          if (this.dirty) {
+            e.preventDefault()
+            e.returnValue = ''
+          }
+        }
+        window.addEventListener('beforeunload', this.beforeUnloadHandler)
+
+        this.clickHandler = e => {
+          if (!this.dirty) return
+
+          const link = e.target.closest('a[href][data-phx-link]')
+          if (link && !link.hasAttribute('data-confirm')) {
+            if (
+              !confirm(
+                'You have unsaved changes. Are you sure you want to leave?'
+              )
+            ) {
+              e.preventDefault()
+              e.stopPropagation()
+            }
+          }
+        }
+        document.addEventListener('click', this.clickHandler, true)
+      },
+      destroyed () {
+        window.removeEventListener('beforeunload', this.beforeUnloadHandler)
+        document.removeEventListener('click', this.clickHandler, true)
+      }
+    },
+    IframeAuthRefresh: {
+      mounted () {
+        if (window !== window.parent) {
+          window.parent.postMessage({ type: 'peek-iframe-auth-refresh' }, '*')
+        }
+      }
+    },
+    AutoClearFlash: {
+      mounted () {
+        let ignoredIDs = ['client-error', 'server-error']
+        if (ignoredIDs.includes(this.el.id)) return
+
+        let hideElementAfter = 2000 // ms
+        let clearFlashAfter = hideElementAfter + 500 // ms
 
         // first hide the element
         setTimeout(() => {
-          this.el.style.opacity = 0;
-        }, hideElementAfter);
+          this.el.style.opacity = 0
+        }, hideElementAfter)
 
         // then clear the flash
         setTimeout(() => {
-          this.pushEvent("lv:clear-flash");
-        }, clearFlashAfter);
-      },
-    },
+          this.pushEvent('lv:clear-flash')
+        }, clearFlashAfter)
+      }
+    }
   }
 })
 
 // Show progress bar on live navigation and form submits
-topbar.config({barColors: {0: "#29d"}, shadowColor: "rgba(0, 0, 0, .3)"})
-window.addEventListener("phx:page-loading-start", _info => topbar.show(300))
-window.addEventListener("phx:page-loading-stop", _info => topbar.hide())
+topbar.config({ barColors: { 0: '#29d' }, shadowColor: 'rgba(0, 0, 0, .3)' })
+window.addEventListener('phx:page-loading-start', _info => topbar.show(300))
+window.addEventListener('phx:page-loading-stop', _info => topbar.hide())
 
 // connect if there are any LiveViews on the page
 liveSocket.connect()
@@ -66,10 +120,10 @@ liveSocket.connect()
 // >> liveSocket.enableDebug()
 // >> liveSocket.enableLatencySim(1000)  // enabled for duration of browser session
 // >> liveSocket.disableLatencySim()
-window.liveSocket = liveSocket;
+window.liveSocket = liveSocket
 
-(() => {
-  function detectIframe() {
+;(() => {
+  function detectIframe () {
     const isInIframe = window !== window.top
 
     // Add class to body based on iframe status
@@ -84,11 +138,43 @@ window.liveSocket = liveSocket;
     return isInIframe
   }
 
+  function setupIframeResizeObserver () {
+    // If we are inside an iframe, we can optionally resize the parent iframe
+    // and remove scrollbars to make it a better experience for the user; no
+    // more scrolling inside a modal.
+    if (window === window.top) return
+
+    let lastHeight = 0
+
+    function sendHeight () {
+      const height = document.body.scrollHeight
+      if (height !== lastHeight) {
+        lastHeight = height
+        window.parent.postMessage(
+          {
+            type: 'peek-iframe-resize',
+            height: height + 20 + 'px'
+          },
+          '*'
+        )
+      }
+    }
+
+    const resizeObserver = new ResizeObserver(() => sendHeight())
+    resizeObserver.observe(document.body)
+
+    sendHeight()
+  }
+
   // Run detection when DOM is ready
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', detectIframe)
+    document.addEventListener('DOMContentLoaded', () => {
+      detectIframe()
+      setupIframeResizeObserver()
+    })
   } else {
     detectIframe()
+    setupIframeResizeObserver()
   }
 
   return {
@@ -103,33 +189,39 @@ window.liveSocket = liveSocket;
 //     1. stream server logs to the browser console
 //     2. click on elements to jump to their definitions in your code editor
 //
-if (process.env.NODE_ENV === "development") {
-  window.addEventListener("phx:live_reload:attached", ({detail: reloader}) => {
-    console.log("GO!")
-    // Enable server log streaming to client.
-    // Disable with reloader.disableServerLogs()
-    reloader.enableServerLogs()
+if (process.env.NODE_ENV === 'development') {
+  window.addEventListener(
+    'phx:live_reload:attached',
+    ({ detail: reloader }) => {
+      console.log('GO!')
+      // Enable server log streaming to client.
+      // Disable with reloader.disableServerLogs()
+      reloader.enableServerLogs()
 
-     // Open configured PLUG_EDITOR at file:line of the clicked element's HEEx component
-    //
-    //   * click with "c" key pressed to open at caller location
-    //   * click with "d" key pressed to open at function component definition location
-    let keyDown
-    window.addEventListener("keydown", e => keyDown = e.key)
-    window.addEventListener("keyup", e => keyDown = null)
-    window.addEventListener("click", e => {
-      if(keyDown === "c"){
-        e.preventDefault()
-        e.stopImmediatePropagation()
-        reloader.openEditorAtCaller(e.target)
-      } else if(keyDown === "d"){
-        e.preventDefault()
-        e.stopImmediatePropagation()
-        reloader.openEditorAtDef(e.target)
-      }
-    }, true)
+      // Open configured PLUG_EDITOR at file:line of the clicked element's HEEx component
+      //
+      //   * click with "c" key pressed to open at caller location
+      //   * click with "d" key pressed to open at function component definition location
+      let keyDown
+      window.addEventListener('keydown', e => (keyDown = e.key))
+      window.addEventListener('keyup', e => (keyDown = null))
+      window.addEventListener(
+        'click',
+        e => {
+          if (keyDown === 'c') {
+            e.preventDefault()
+            e.stopImmediatePropagation()
+            reloader.openEditorAtCaller(e.target)
+          } else if (keyDown === 'd') {
+            e.preventDefault()
+            e.stopImmediatePropagation()
+            reloader.openEditorAtDef(e.target)
+          }
+        },
+        true
+      )
 
-     window.liveReloader = reloader
-  })
+      window.liveReloader = reloader
+    }
+  )
 }
-

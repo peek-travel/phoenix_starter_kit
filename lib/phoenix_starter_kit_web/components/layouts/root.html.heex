@@ -40,7 +40,7 @@
       })();
     </script>
   </head>
-  <body>
+  <body id="app-body" phx-hook={if !assigns[:current_partner_user], do: "IframeAuthRefresh", else: nil}>
     {@inner_content}
   </body>
 </html>
