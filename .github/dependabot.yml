@@ -1,0 +1,23 @@
+version: 2
+updates:
+  - package-ecosystem: 'mix'
+    directory: '/'
+    schedule:
+      interval: 'daily'
+    open-pull-requests-limit: 20
+    insecure-external-code-execution: allow
+    target-branch: 'dependencies'
+
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'daily'
+    open-pull-requests-limit: 10
+    target-branch: 'dependencies'
+
+  - package-ecosystem: 'docker'
+    directory: '/'
+    schedule:
+      interval: 'daily'
+    open-pull-requests-limit: 10
+    target-branch: 'dependencies'
