@@ -12,6 +12,7 @@ defmodule PhoenixStarterKitWeb.Router do
     plug :put_root_layout, html: {PhoenixStarterKitWeb.Layouts, :root}
     plug :protect_from_forgery
     plug :put_secure_browser_headers
+    plug :fetch_partner_user_from_auth_token
     plug :fetch_current_partner_user
     plug :allow_peek_iframe
     plug PhoenixStarterKitWeb.Plugs.SetCurrentPartner
@@ -52,6 +53,7 @@ defmodule PhoenixStarterKitWeb.Router do
     pipe_through [:browser, :require_authenticated_partner_user]
 
     live_session :require_authenticated_partner_user,
+      session: {PhoenixStarterKitWeb.PartnerUserAuth, :live_session_data, []},
       on_mount: [{PhoenixStarterKitWeb.PartnerUserAuth, :ensure_authenticated}] do
       live "/settings", SettingsLive, :index
     end

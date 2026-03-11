@@ -20,6 +20,9 @@ defmodule PhoenixStarterKitWeb.Plugs.SetCurrentPartner do
   def init(opts), do: opts
 
   @impl true
+  # Skip if current_partner was already set (e.g. by auth token plug)
+  def call(%{assigns: %{current_partner: %PhoenixStarterKit.Partners.Partner{}}} = conn, _opts), do: conn
+
   def call(%{assigns: %{peek_install_id: peek_install_id}} = conn, _opts)
       when is_binary(peek_install_id) do
     partner = Partners.get_partner_by_app_registry_install_refid(peek_install_id)

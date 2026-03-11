@@ -41,7 +41,7 @@ defmodule PhoenixStarterKitWeb.PeekPro.EmbedsControllerTest do
       assert html_response(conn, 200) =~ "/peek-pro/settings/?attempt=4"
     end
 
-    test "POST /peek-pro/settings/ with valid partner logs in partner user", %{conn: conn} do
+    test "POST /peek-pro/settings/ with valid partner redirects with auth token", %{conn: conn} do
       # Create a partner first
       external_refid = "external-#{System.unique_integer()}"
       name = "Test Partner"
@@ -64,8 +64,9 @@ defmodule PhoenixStarterKitWeb.PeekPro.EmbedsControllerTest do
         |> assign(:peek_account_user, account_user)
         |> post(~p"/peek-pro/settings/")
 
-      # Should redirect to the home page after login
-      assert redirected_to(conn) == "/settings"
+      # Should redirect to settings with an auth_token
+      redirect_url = redirected_to(conn)
+      assert redirect_url =~ "/settings?auth_token="
 
       # Verify the partner user was created
       partner_user =
@@ -75,18 +76,18 @@ defmodule PhoenixStarterKitWeb.PeekPro.EmbedsControllerTest do
       assert partner_user != nil
     end
 
-    test "shows Safari landing page when user agent is Safari", %{conn: conn} do
+    test "redirects with auth token regardless of browser (Safari, Chrome, etc)", %{conn: conn} do
       partner = PhoenixStarterKit.PartnersFixtures.partner_fixture()
 
       account_user = %PeekAppSDK.AccountUser{
         id: "123",
         name: "Test User",
-        email: "test.user@example.com",
+        email: "safari.test@example.com",
         is_peek_admin: true,
         primary_role: "partner_admin"
       }
 
-      # Set Safari user agent
+      # Safari user agent — should no longer show a landing page
       conn =
         conn
         |> put_req_header(
@@ -97,29 +98,21 @@ defmodule PhoenixStarterKitWeb.PeekPro.EmbedsControllerTest do
           "peek-auth" => PeekAppSDK.Token.new_for_app_installation!(partner.app_registry_installation_refid, account_user)
         })
 
-      assert response(conn, 200) =~ "We Love Safari, But…"
-      assert response(conn, 200) =~ "proceed-form"
-      assert response(conn, 200) =~ "Open in New Tab"
-      assert response(conn, 200) =~ "new-tab-form"
-      assert response(conn, 200) =~ "target=\"_blank\""
-      assert response(conn, 200) =~ "name=\"peek-auth\""
-      assert response(conn, 200) =~ "name=\"force_proceed\" value=\"true\""
-      assert response(conn, 200) =~ "try-anyway-form"
-      assert response(conn, 200) =~ "handleButtonClick(event)"
+      redirect_url = redirected_to(conn)
+      assert redirect_url =~ "/settings?auth_token="
     end
 
-    test "proceeds normally when user agent is Chrome", %{conn: conn} do
+    test "auth token in redirect is a valid Phoenix.Token", %{conn: conn} do
       partner = PhoenixStarterKit.PartnersFixtures.partner_fixture()
 
       account_user = %PeekAppSDK.AccountUser{
-        id: "123",
-        name: "Test User",
-        email: "test.user@example.com",
-        is_peek_admin: true,
+        id: "456",
+        name: "Token User",
+        email: "token.test@example.com",
+        is_peek_admin: false,
         primary_role: "partner_admin"
       }
 
-      # Set Chrome user agent
       conn =
         conn
         |> put_req_header(
@@ -130,32 +123,15 @@ defmodule PhoenixStarterKitWeb.PeekPro.EmbedsControllerTest do
           "peek-auth" => PeekAppSDK.Token.new_for_app_installation!(partner.app_registry_installation_refid, account_user)
         })
 
-      assert redirected_to(conn) == ~p"/settings"
-    end
+      redirect_url = redirected_to(conn)
+      %URI{query: query} = URI.parse(redirect_url)
+      %{"auth_token" => token} = URI.decode_query(query)
 
-    test "proceeds normally when Safari user has force_proceed=true", %{conn: conn} do
-      partner = PhoenixStarterKit.PartnersFixtures.partner_fixture()
+      assert {:ok, {partner_user_id, partner_id}} =
+               Phoenix.Token.verify(PhoenixStarterKitWeb.Endpoint, "partner_auth", token, max_age: 86_400)
 
-      account_user = %PeekAppSDK.AccountUser{
-        id: "123",
-        name: "Test User",
-        email: "test.user@example.com",
-        is_peek_admin: true,
-        primary_role: "partner_admin"
-      }
-
-      # Set Safari user agent but with force_proceed
-      conn =
-        conn
-        |> put_req_header(
-          "user-agent",
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
-        )
-        |> post(~p"/peek-pro/settings?force_proceed=true", %{
-          "peek-auth" => PeekAppSDK.Token.new_for_app_installation!(partner.app_registry_installation_refid, account_user)
-        })
-
-      assert redirected_to(conn) == ~p"/settings"
+      assert is_binary(partner_user_id)
+      assert partner_id == partner.id
     end
   end
 end

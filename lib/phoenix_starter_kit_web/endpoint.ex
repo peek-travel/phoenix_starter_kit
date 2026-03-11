@@ -14,9 +14,15 @@ defmodule PhoenixStarterKitWeb.Endpoint do
     secure: true
   ]
 
+  # NOTE: session is intentionally omitted from connect_info.
+  # When this app runs inside a third-party iframe (e.g. peek-pro app-store),
+  # browsers block third-party cookies, causing the session to be nil.
+  # LiveView's channel join then crashes on Map.merge(nil, verified_session).
+  # All auth data is passed via live_session_data/1 → the phx-session HTML
+  # token, which is cookie-independent. See PartnerUserAuth for details.
   socket "/live", Phoenix.LiveView.Socket,
-    websocket: [connect_info: [session: @session_options]],
-    longpoll: [connect_info: [session: @session_options]]
+    websocket: [connect_info: []],
+    longpoll: [connect_info: []]
 
   # Serve at "/" the static files from "priv/static" directory.
   #
