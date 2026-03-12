@@ -10,9 +10,12 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+    env:
+      HAS_SECRET: ${{ secrets.AUGMENT_SESSION_AUTH != '' }}
     steps:
       - name: AI PR Review with Auggie
         id: review
+        if: env.HAS_SECRET == 'true'
         # Using @v0 intentionally to receive latest features and improvements
         uses: augmentcode/review-pr@v0
         with:

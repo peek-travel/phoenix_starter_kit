@@ -2,8 +2,10 @@ defmodule PhoenixStarterKitWeb.PageController do
   use PhoenixStarterKitWeb, :controller
 
   def home(conn, _params) do
-    # The home page is often custom made,
-    # so skip the default app layout.
-    render(conn, :home)
+    if conn.assigns[:current_partner_user] do
+      redirect(conn, to: ~p"/settings")
+    else
+      render(conn, :home)
+    end
   end
 end
