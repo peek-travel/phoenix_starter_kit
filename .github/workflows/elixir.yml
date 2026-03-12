@@ -167,7 +167,7 @@ jobs:
         id: app-tests
         run: mix coveralls.lcov --no-compile --parallel
       - name: Upload coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-report
           path: cover/lcov.info
