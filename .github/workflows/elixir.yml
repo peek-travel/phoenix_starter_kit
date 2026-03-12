@@ -183,7 +183,7 @@ jobs:
         with:
           name: coverage-report
           path: cover
-      - uses: VeryGoodOpenSource/very_good_coverage@v2
+      - uses: VeryGoodOpenSource/very_good_coverage@v3
         with:
           path: 'cover/lcov.info'
           min_coverage: 100
