@@ -86,7 +86,7 @@ jobs:
 
       - name: Fallback comment on failure
         if: steps.review.outcome == 'failure'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const serverUrl = '${{ github.server_url }}';
