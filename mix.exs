@@ -62,7 +62,7 @@ defmodule PhoenixStarterKit.MixProject do
       {:esbuild, "~> 0.8", runtime: Mix.env() == :dev},
       {:sentry, "~> 12.0"},
       {:tailwind, "~> 0.3", runtime: Mix.env() == :dev},
-      {:heroicons, github: "tailwindlabs/heroicons", tag: "v2.1.1", sparse: "optimized", app: false, compile: false, depth: 1},
+      {:heroicons, github: "tailwindlabs/heroicons", tag: "v2.2.0", sparse: "optimized", app: false, compile: false, depth: 1},
       {:swoosh, "~> 1.5"},
       {:finch, "~> 0.13"},
       {:req, "~> 0.5"},
