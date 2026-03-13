@@ -190,7 +190,14 @@ else
   fi
 fi
 
-# Step 6: Run checks
+# Step 6: Remove dependabot config (apps manage dependency updates differently)
+print_status "Removing dependabot configuration..."
+if [ -f ".github/dependabot.yml" ]; then
+  rm .github/dependabot.yml
+  print_success "Removed .github/dependabot.yml"
+fi
+
+# Step 7: Run checks
 echo ""
 print_status "Running checks to verify everything works..."
 if bin/check; then
