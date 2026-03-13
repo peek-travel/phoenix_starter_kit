@@ -56,8 +56,9 @@ You are tasked with backporting the latest changes from the `phoenix_starter_kit
 
    c. **Apply the changes to this project**, adapting them as needed:
       - The starter kit uses a generic app name — map files/modules to this project's equivalents
-      - The starter kit module namespace is `PhoenixStarterKit` — this project uses `Retarget`/`RetargetWeb`
-      - The starter kit app name is `phoenix_starter_kit` — this project uses `retarget`
+      - Detect the current project's module namespace by reading `mix.exs` (look for `defmodule <Module>.MixProject`)
+      - Detect the current app name from the `:app` field in `mix.exs`
+      - The starter kit module namespace is `PhoenixStarterKit`/`PhoenixStarterKitWeb` and app name is `phoenix_starter_kit` — map these to the detected project equivalents
       - Some files may not exist in this project or may have diverged significantly — use judgment
       - Skip changes that are clearly starter-kit-specific and don't apply
 
