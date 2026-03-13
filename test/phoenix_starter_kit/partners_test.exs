@@ -80,21 +80,21 @@ defmodule PhoenixStarterKit.PartnersTest do
       assert partner == Partners.get_partner!(partner.id)
     end
 
-    test "update_partner/2 with peek_pro_installation updates the installation" do
+    test "update_partner/2 with app_registry_installation updates the installation" do
       partner = partner_fixture()
 
-      peek_pro_installation = %{
+      app_registry_installation = %{
         status: :installed,
         display_version: "1.0.0",
         install_id: "install-123"
       }
 
       assert {:ok, %Partner{} = updated_partner} =
-               Partners.update_partner(partner, %{peek_pro_installation: peek_pro_installation})
+               Partners.update_partner(partner, %{app_registry_installation: app_registry_installation})
 
-      assert updated_partner.peek_pro_installation.status == :installed
-      assert updated_partner.peek_pro_installation.display_version == "1.0.0"
-      assert updated_partner.peek_pro_installation.install_id == "install-123"
+      assert updated_partner.app_registry_installation.status == :installed
+      assert updated_partner.app_registry_installation.display_version == "1.0.0"
+      assert updated_partner.app_registry_installation.install_id == "install-123"
     end
 
     test "delete_partner/1 deletes the partner" do

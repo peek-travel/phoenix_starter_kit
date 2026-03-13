@@ -22,8 +22,8 @@ defmodule PhoenixStarterKitWeb.Registry.WebhookController do
   def on_installation_status_change(conn, params) do
     partner = do_upsert_partner!(params)
 
-    if partner.peek_pro_installation.status == :uninstalled, do: on_uninstalled(partner)
-    if partner.peek_pro_installation.status == :installed, do: on_installed(partner)
+    if partner.app_registry_installation.status == :uninstalled, do: on_uninstalled(partner)
+    if partner.app_registry_installation.status == :installed, do: on_installed(partner)
 
     send_resp(conn, :ok, "Partner #{partner.name} updated successfully.")
   end
@@ -62,7 +62,7 @@ defmodule PhoenixStarterKitWeb.Registry.WebhookController do
     # 2. Ensure it matches the state we just received
     {:ok, partner} =
       Partners.update_partner(partner, %{
-        peek_pro_installation: %{
+        app_registry_installation: %{
           status: status,
           display_version: display_version,
           install_id: install_id

@@ -27,7 +27,7 @@ Manages all partner-related functionality:
 - **Partner**: Represents a Peek Pro partner who has installed the app
 - **PartnerUser**: Users who can log in on behalf of a partner
 - **PartnerUserConnection**: Many-to-many relationship between partners and users
-- **PeekProInstallation**: Embedded schema tracking installation status
+- **AppRegistryInstallation**: Embedded schema tracking installation status
 
 Key responsibilities:
 - Partner creation and management
@@ -236,7 +236,7 @@ Partner users authenticate via email only (no passwords) because:
 
 ### Why Embedded Schemas?
 
-`PeekProInstallation` is embedded rather than a separate table because:
+`AppRegistryInstallation` is embedded rather than a separate table because:
 1. 1:1 relationship with Partner
 2. Installation data is tightly coupled to partner
 3. Simplifies queries and reduces joins

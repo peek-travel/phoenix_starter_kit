@@ -30,7 +30,7 @@ The core data model consists of several key entities:
 
 The Partner schema includes an embedded schema for:
 
-- **PeekProInstallation**: Tracks the status and details of the Peek Pro app installation
+- **AppRegistryInstallation**: Tracks the status and details of the app registry installation
 
 ### Web Interface
 

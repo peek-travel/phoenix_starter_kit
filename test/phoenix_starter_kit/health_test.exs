@@ -19,7 +19,7 @@ defmodule PhoenixStarterKit.HealthTest do
       # Create a partner with installed status
       _partner1 =
         partner_fixture(%{
-          peek_pro_installation: %{
+          app_registry_installation: %{
             status: :installed,
             display_version: "1.0.0",
             install_id: "install-1"
@@ -30,7 +30,7 @@ defmodule PhoenixStarterKit.HealthTest do
       # Create a partner with update_installed status
       _partner3 =
         partner_fixture(%{
-          peek_pro_installation: %{
+          app_registry_installation: %{
             status: :update_installed,
             display_version: "1.0.0",
             install_id: "install-3"
@@ -41,7 +41,7 @@ defmodule PhoenixStarterKit.HealthTest do
       # Create a partner with uninstalled status
       _partner4 =
         partner_fixture(%{
-          peek_pro_installation: %{
+          app_registry_installation: %{
             status: :uninstalled,
             display_version: "1.0.0",
             install_id: "install-4"
@@ -53,7 +53,7 @@ defmodule PhoenixStarterKit.HealthTest do
       # This partner should not be counted in the metrics because is_test is true
       _test_partner =
         partner_fixture(%{
-          peek_pro_installation: %{
+          app_registry_installation: %{
             status: :installed,
             display_version: "1.0.0",
             install_id: "install-5"

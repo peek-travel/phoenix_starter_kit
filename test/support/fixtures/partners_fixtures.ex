@@ -13,7 +13,7 @@ defmodule PhoenixStarterKit.PartnersFixtures do
 
   def valid_partner_attributes(attrs \\ %{}) do
     attrs
-    |> maybe_update_peek_pro_installation()
+    |> maybe_update_app_registry_installation()
     |> Enum.into(%{
       name: "Partner #{System.unique_integer()}",
       external_refid: unique_external_refid(),
@@ -36,7 +36,7 @@ defmodule PhoenixStarterKit.PartnersFixtures do
   def partner_with_installation_fixture(attrs \\ %{}) do
     partner = partner_fixture(attrs)
 
-    peek_pro_installation = %{
+    app_registry_installation = %{
       status: :installed,
       display_version: "1.0.0",
       install_id: partner.app_registry_installation_refid
@@ -44,7 +44,7 @@ defmodule PhoenixStarterKit.PartnersFixtures do
 
     {:ok, partner} =
       Partners.update_partner(partner, %{
-        peek_pro_installation: peek_pro_installation
+        app_registry_installation: app_registry_installation
       })
 
     partner
@@ -92,21 +92,21 @@ defmodule PhoenixStarterKit.PartnersFixtures do
     Map.merge(struct, attrs)
   end
 
-  defp maybe_update_peek_pro_installation(%{peek_pro_installation: :installed} = attrs) do
-    Map.replace!(attrs, :peek_pro_installation, %{
+  defp maybe_update_app_registry_installation(%{app_registry_installation: :installed} = attrs) do
+    Map.replace!(attrs, :app_registry_installation, %{
       status: :installed,
       display_version: "1.0.0",
       install_id: unique_app_registry_installation_refid()
     })
   end
 
-  defp maybe_update_peek_pro_installation(%{peek_pro_installation: :uninstalled} = attrs) do
-    Map.replace!(attrs, :peek_pro_installation, %{
+  defp maybe_update_app_registry_installation(%{app_registry_installation: :uninstalled} = attrs) do
+    Map.replace!(attrs, :app_registry_installation, %{
       status: :uninstalled,
       display_version: "1.0.0",
       install_id: unique_app_registry_installation_refid()
     })
   end
 
-  defp maybe_update_peek_pro_installation(attrs), do: attrs
+  defp maybe_update_app_registry_installation(attrs), do: attrs
 end
