@@ -54,11 +54,11 @@ defmodule PhoenixStarterKit.Health do
     installed_partners_count =
       from(p in Partner,
         where:
-          not is_nil(p.peek_pro_installation) and
+          not is_nil(p.app_registry_installation) and
             fragment(
               "?->>'status' = 'installed' OR ?->>'status' = 'update_installed'",
-              p.peek_pro_installation,
-              p.peek_pro_installation
+              p.app_registry_installation,
+              p.app_registry_installation
             ) and
             p.is_test == false
       )
@@ -68,11 +68,11 @@ defmodule PhoenixStarterKit.Health do
     active_partners_count =
       from(p in Partner,
         where:
-          not is_nil(p.peek_pro_installation) and
+          not is_nil(p.app_registry_installation) and
             fragment(
               "?->>'status' = 'installed' OR ?->>'status' = 'update_installed'",
-              p.peek_pro_installation,
-              p.peek_pro_installation
+              p.app_registry_installation,
+              p.app_registry_installation
             ) and
             p.is_test == false,
         distinct: p.id

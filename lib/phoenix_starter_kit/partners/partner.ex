@@ -2,9 +2,9 @@ defmodule PhoenixStarterKit.Partners.Partner do
   @moduledoc """
   The Partner schema represents a partner in the system.
 
-  A partner is an entity that has installed the PeekPro app and can have multiple
-  partner users associated with it. The partner has information about the PeekPro
-  installation, such as the installation ID, status, and display version.
+  A partner is an entity that has installed the app and can have multiple
+  partner users associated with it. The partner has information about the app
+  registry installation, such as the installation ID, status, and display version.
   """
   use PhoenixStarterKit.Schema
 
@@ -25,13 +25,13 @@ defmodule PhoenixStarterKit.Partners.Partner do
       field :url, :string
     end
 
-    embeds_one :peek_pro_installation, PeekProInstallation,
+    embeds_one :app_registry_installation, AppRegistryInstallation,
       on_replace: :delete,
       primary_key: false do
       @moduledoc """
-      Embedded schema for PeekPro installation details.
+      Embedded schema for app registry installation details.
 
-      Tracks the status, version, and installation ID of the PeekPro app.
+      Tracks the status, version, and installation ID of the app.
       """
       field :status, Ecto.Enum,
         values: [
@@ -52,7 +52,7 @@ defmodule PhoenixStarterKit.Partners.Partner do
     partner
     |> cast(attrs, [:name, :external_refid, :app_registry_installation_refid, :is_test, :timezone, :platform])
     |> cast_embed(:api_config, with: &api_config_changeset/2)
-    |> cast_embed(:peek_pro_installation, with: &peek_pro_installation_changeset/2)
+    |> cast_embed(:app_registry_installation, with: &app_registry_installation_changeset/2)
     |> validate_required([:name, :external_refid, :platform])
     |> validate_timezone()
   end
@@ -73,11 +73,11 @@ defmodule PhoenixStarterKit.Partners.Partner do
   end
 
   @doc """
-  Changeset function for the PeekProInstallation embedded schema.
+  Changeset function for the AppRegistryInstallation embedded schema.
 
   Validates that status, display_version, and install_id are present.
   """
-  def peek_pro_installation_changeset(record, attrs) do
+  def app_registry_installation_changeset(record, attrs) do
     record
     |> cast(attrs, [:status, :display_version, :install_id])
     |> validate_required([:status, :display_version, :install_id])

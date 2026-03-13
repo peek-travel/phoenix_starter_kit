@@ -29,9 +29,9 @@ defmodule PhoenixStarterKitWeb.Registry.WebhookControllerTest do
       assert response(conn, 200) == "Partner Test Partner updated successfully."
       partner = Partners.get_partner_by_external_id(external_refid)
       assert partner.name == name
-      assert partner.peek_pro_installation.status == :installed
-      assert partner.peek_pro_installation.display_version == "1.0.0"
-      assert partner.peek_pro_installation.install_id == install_id
+      assert partner.app_registry_installation.status == :installed
+      assert partner.app_registry_installation.display_version == "1.0.0"
+      assert partner.app_registry_installation.install_id == install_id
       assert partner.platform == :peek
       assert partner.timezone == "America/Los_Angeles"
       assert partner.api_config == nil
@@ -50,9 +50,9 @@ defmodule PhoenixStarterKitWeb.Registry.WebhookControllerTest do
       assert response(conn, 200) == "Partner #{partner.name} updated successfully."
       updated_partner = Partners.get_partner_by_app_registry_install_refid(install_id)
       assert updated_partner.id == partner.id
-      assert updated_partner.peek_pro_installation.status == :uninstalled
-      assert updated_partner.peek_pro_installation.display_version == "2.0.0"
-      assert updated_partner.peek_pro_installation.install_id == install_id
+      assert updated_partner.app_registry_installation.status == :uninstalled
+      assert updated_partner.app_registry_installation.display_version == "2.0.0"
+      assert updated_partner.app_registry_installation.install_id == install_id
     end
 
     test "legacy registry: handles is_test flag", %{conn: conn} do
