@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git fetch:*)",
+      "Bash(git checkout:*)",
+      "Bash(mix format:*)",
+      "Bash(mix credo:*)"
+    ]
+  }
+}
