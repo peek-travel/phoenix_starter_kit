@@ -37,14 +37,14 @@ jobs:
           echo ::set-output name=files_key::${{ hashFiles('lib/**/*.ex','test/**/*.ex','mix.lock', 'config/*.exs') }}
           echo ::set-output name=deps_cache_prefix::${{ env.DEPS_CACHE_PREFIX }}
           echo ::set-output name=build_cache_prefix::${{ env.BUILD_CACHE_PREFIX }}
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         id: deps_cache
         with:
           path: deps
           key: ${{ steps.keys.outputs.deps_cache_prefix }}${{ steps.keys.outputs.deps_key }}-${{ steps.keys.outputs.version_key }}-${{ steps.keys.outputs.lockfile_key }}
           restore-keys: |
             ${{ steps.keys.outputs.deps_cache_prefix }}${{ steps.keys.outputs.deps_key }}-${{ steps.keys.outputs.version_key }}-
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         id: build_cache
         with:
           path: _build
@@ -80,14 +80,14 @@ jobs:
           echo ::set-output name=files_key::${{ hashFiles('lib/**/*.ex','test/**/*.ex','mix.lock', 'config.*.exs') }}
           echo ::set-output name=deps_cache_prefix::${{ env.DEPS_CACHE_PREFIX }}
           echo ::set-output name=build_cache_prefix::${{ env.BUILD_CACHE_PREFIX }}
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         id: deps_cache
         with:
           path: deps
           key: ${{ steps.keys.outputs.deps_cache_prefix }}${{ steps.keys.outputs.deps_key }}-${{ steps.keys.outputs.version_key }}-${{ steps.keys.outputs.lockfile_key }}
           restore-keys: |
             ${{ steps.keys.outputs.deps_cache_prefix }}${{ steps.keys.outputs.deps_key }}-${{ steps.keys.outputs.version_key }}-
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         id: build_cache
         with:
           path: _build
@@ -137,14 +137,14 @@ jobs:
           echo ::set-output name=files_key::${{ hashFiles('lib/**/*.ex','test/**/*.ex','mix.lock', 'config.*.exs') }}
           echo ::set-output name=deps_cache_prefix::${{ env.DEPS_CACHE_PREFIX }}
           echo ::set-output name=build_cache_prefix::${{ env.BUILD_CACHE_PREFIX }}
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         id: deps_cache
         with:
           path: deps
           key: ${{ steps.keys.outputs.deps_cache_prefix }}${{ steps.keys.outputs.deps_key }}-${{ steps.keys.outputs.version_key }}-${{ steps.keys.outputs.lockfile_key }}
           restore-keys: |
             ${{ steps.keys.outputs.deps_cache_prefix }}${{ steps.keys.outputs.deps_key }}-${{ steps.keys.outputs.version_key }}-
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         id: build_cache
         with:
           path: _build
@@ -210,14 +210,14 @@ jobs:
           echo ::set-output name=files_key::${{ hashFiles('lib/**/*.ex','test/**/*.ex','mix.lock', 'config.*.exs') }}
           echo ::set-output name=deps_cache_prefix::${{ env.DEPS_CACHE_PREFIX }}
           echo ::set-output name=build_cache_prefix::${{ env.BUILD_CACHE_PREFIX }}
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         id: deps_cache
         with:
           path: deps
           key: ${{ steps.keys.outputs.deps_cache_prefix }}${{ steps.keys.outputs.deps_key }}-${{ steps.keys.outputs.version_key }}-${{ steps.keys.outputs.lockfile_key }}
           restore-keys: |
             ${{ steps.keys.outputs.deps_cache_prefix }}${{ steps.keys.outputs.deps_key }}-${{ steps.keys.outputs.version_key }}-
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         id: build_cache
         with:
           path: _build
