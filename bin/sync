@@ -4,6 +4,7 @@ set -e
 
 DEBUG=false
 AUTO_PUBLISH=true
+PULL_MODE=false
 JSON_FILE=""
 
 # Function to print error and exit
@@ -32,6 +33,10 @@ while [[ $# -gt 0 ]]; do
       fi
       shift 2
       ;;
+    --pull)
+      PULL_MODE=true
+      shift
+      ;;
     *)
       if [[ -z "$JSON_FILE" ]]; then
         JSON_FILE="$1"
@@ -45,7 +50,7 @@ done
 
 # Validate required file argument
 if [[ -z "$JSON_FILE" ]]; then
-  error_exit "Usage: bin/sync <json-file> [--publish false] [--debug]"
+  error_exit "Usage: bin/sync <json-file> [--pull] [--publish false] [--debug]"
 fi
 
 # Validate .env file
@@ -72,6 +77,88 @@ log_debug "Using JSON File: $JSON_FILE"
 # Check for JSON file
 if [[ ! -f "$JSON_FILE" ]]; then
   error_exit "$JSON_FILE not found"
+fi
+
+# Extract app ID from JSON file
+APP_ID=$(jq -r '.data.app.id // empty' "$JSON_FILE")
+if [[ -z "$APP_ID" ]]; then
+  error_exit "No app ID found in $JSON_FILE at .data.app.id"
+fi
+
+log_debug "App ID: $APP_ID"
+
+# Handle --pull mode: fetch from registry and update local file
+if [ "$PULL_MODE" = true ]; then
+  # Check for uncommitted changes to the file
+  if git diff --quiet "$JSON_FILE" 2>/dev/null; then
+    HAS_UNCOMMITTED=false
+  else
+    HAS_UNCOMMITTED=true
+  fi
+
+  # Also check staged changes
+  if git diff --cached --quiet "$JSON_FILE" 2>/dev/null; then
+    HAS_STAGED=false
+  else
+    HAS_STAGED=true
+  fi
+
+  echo
+  echo "📥 Ready to pull from registry:"
+  echo "    File to overwrite: $JSON_FILE"
+  echo "    App ID: $APP_ID"
+  echo "    Registry URL: $URL"
+  echo "    Endpoint: /apps/$APP_ID/export"
+  echo
+
+  if [ "$HAS_UNCOMMITTED" = true ] || [ "$HAS_STAGED" = true ]; then
+    echo "⚠️  WARNING: $JSON_FILE has uncommitted changes that will be lost!"
+    echo
+    git diff --stat "$JSON_FILE" 2>/dev/null || true
+    git diff --cached --stat "$JSON_FILE" 2>/dev/null || true
+    echo
+    read -p "Are you SURE you want to discard local changes and overwrite? (yes/no): " CONFIRM
+  else
+    read -p "This will overwrite $JSON_FILE with the registry version. Continue? (yes/no): " CONFIRM
+  fi
+
+  if [[ "$CONFIRM" != "yes" ]]; then
+    echo "Aborted."
+    exit 1
+  fi
+  echo
+
+  EXPORT_URL="$URL/apps/$APP_ID/export"
+  log_debug "Fetching from $EXPORT_URL"
+
+  set +e
+  RESPONSE=$(curl --silent --show-error --write-out "\nHTTP_STATUS:%{http_code}" \
+    --request GET \
+    --url "$EXPORT_URL" \
+    --header "Authorization: Bearer $TOKEN" \
+    --header "User-Agent: sync-script/1.0")
+  CURL_EXIT=$?
+  set -e
+
+  HTTP_STATUS=$(echo "$RESPONSE" | sed -n 's/.*HTTP_STATUS://p')
+  RESPONSE_BODY=$(echo "$RESPONSE" | sed '/HTTP_STATUS:/d')
+
+  if [ "$DEBUG" = true ]; then
+    echo "📥 Raw response from server:"
+    echo "$RESPONSE_BODY"
+    echo "🔢 HTTP status code: $HTTP_STATUS"
+  fi
+
+  if [ "$CURL_EXIT" -ne 0 ] || [[ "$HTTP_STATUS" -ge 400 ]]; then
+    echo "❌ Request failed with status $HTTP_STATUS"
+    echo "$RESPONSE_BODY"
+    exit 1
+  fi
+
+  # Write the response to file
+  echo "$RESPONSE_BODY" | jq '.' > "$JSON_FILE"
+  echo "✅ Updated $JSON_FILE from registry"
+  exit 0
 fi
 
 if [ "$DEBUG" = true ]; then

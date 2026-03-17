@@ -67,7 +67,9 @@ defmodule PhoenixStarterKitWeb.Registry.WebhookController do
           display_version: display_version,
           install_id: install_id
         },
-        is_test: is_test
+        is_test: is_test,
+        api_config: api_config,
+        name: name
       })
 
     partner

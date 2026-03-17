@@ -293,11 +293,15 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
         end
       end)
 
-    # Set platform after assign_new so it always runs in the current process
+    # Set platform and Sentry context after assign_new so it always runs in the
+    # current process — LiveView runs in a separate process from the HTTP conn,
+    # so process-dictionary state (Sentry, PlatformGettext) must be re-set here.
     if partner_user = socket.assigns[:current_partner_user] do
       if partner_user.partner do
         PlatformGettext.put_platform(partner_user.partner.platform)
       end
+
+      set_sentry_context(partner_user)
     end
 
     safe_on_mount(socket)
