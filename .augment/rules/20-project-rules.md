@@ -5,7 +5,7 @@ type: "always_apply"
 # Project Rules — Phoenix Starter Kit
 
 ## Commands & CI
-- **ALWAYS run `./bin/check` before commit/push** (format, Credo, tests).
+- **ALWAYS run `make` before commit/push** (format, Credo, tests).
 - **ALL warnings, errors, and Credo issues MUST be fixed** - no exceptions!
 - **Remove ALL `IO.inspect` calls** from production code.
 - **Fix ALL compiler warnings**

@@ -41,7 +41,7 @@ You are tasked with bringing test coverage to 100%. Work through uncovered files
 
 8. **Run the full check** to make sure nothing is broken:
    ```bash
-   ./bin/check
+   make
    ```
 
 ## Important Notes

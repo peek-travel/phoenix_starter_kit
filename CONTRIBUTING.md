@@ -33,7 +33,7 @@ Thank you for your interest in contributing to the Phoenix Starter Kit for Peek 
 
 5. Run the test suite to ensure everything is working:
    ```bash
-   bin/check
+   make
    ```
 
 ## Development Workflow
@@ -77,7 +77,7 @@ mix format
 mix credo
 
 # Run all checks (format, credo, tests)
-bin/check
+make
 ```
 
 ## Making Changes
@@ -137,7 +137,7 @@ Add support for custom webhook events
 
 ### Before Submitting
 
-1. Ensure all tests pass: `bin/check`
+1. Ensure all tests pass: `make`
 2. Update documentation as needed
 3. Add yourself to the contributors list (if not already there)
 4. Rebase on the latest main branch

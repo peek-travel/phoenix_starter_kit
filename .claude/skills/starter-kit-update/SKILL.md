@@ -54,7 +54,19 @@ You are tasked with backporting the latest changes from the `phoenix_starter_kit
         --jq '.commit.message'
       ```
 
-   c. **Apply the changes to this project**, adapting them as needed:
+   c. **Check for downstream instructions in the commit message.**
+      Look for a section delimited by `[DOWNSTREAM INSTRUCTIONS]` ... `[/DOWNSTREAM INSTRUCTIONS]` in the commit body. If present, parse and execute those instructions on this project in addition to applying the normal diff. For example:
+      ```
+      Replace bin/check with Makefile
+
+      [DOWNSTREAM INSTRUCTIONS]
+      - Remove any references to `./bin/check` or `bin/check` in docs and replace with `make`
+      - Update CLAUDE.md, README.md, CONTRIBUTING.md, architecture.md, and any AI rules files
+      [/DOWNSTREAM INSTRUCTIONS]
+      ```
+      Apply each instruction as an additional step before committing. If instructions are ambiguous, apply them conservatively and note what was done in the review.
+
+   d. **Apply the changes to this project**, adapting them as needed:
       - The starter kit uses a generic app name — map files/modules to this project's equivalents
       - Detect the current project's module namespace by reading `mix.exs` (look for `defmodule <Module>.MixProject`)
       - Detect the current app name from the `:app` field in `mix.exs`
@@ -62,9 +74,9 @@ You are tasked with backporting the latest changes from the `phoenix_starter_kit
       - Some files may not exist in this project or may have diverged significantly — use judgment
       - Skip changes that are clearly starter-kit-specific and don't apply
 
-   d. **Update `.phoenix_starter_kit_version`** with this commit's SHA.
+   e. **Update `.phoenix_starter_kit_version`** with this commit's SHA.
 
-   e. **Create a commit** with a message referencing the original starter kit commit:
+   f. **Create a commit** with a message referencing the original starter kit commit:
       ```
       starter_kit: <original commit message>
 
@@ -80,12 +92,13 @@ You are tasked with backporting the latest changes from the `phoenix_starter_kit
    - Which changes mapped cleanly?
    - Which required adaptation?
    - Any changes skipped and why?
+   - Any downstream instructions applied and how?
 
    Report this assessment to the user.
 
 7. **Run the full test suite and ensure 100% coverage.**
    ```bash
-   ./bin/check
+   make
    ```
    If tests fail or coverage drops below 100%, fix the issues before proceeding.
    Use the `/coverage` skill if needed to bring coverage back to 100%.
@@ -102,3 +115,4 @@ You are tasked with backporting the latest changes from the `phoenix_starter_kit
 - The `.phoenix_starter_kit_version` file should be updated with each commit to track progress.
 - If the backport introduces new dependencies, run `mix deps.get` after updating `mix.exs`.
 - If the backport includes new migrations, note them in the review but DO NOT run them automatically.
+- Downstream instructions in commit messages are authoritative — apply them even if the diff itself doesn't touch those files.
