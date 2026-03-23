@@ -64,7 +64,7 @@ You are tasked with backporting the latest changes from the `phoenix_starter_kit
       - Update CLAUDE.md, README.md, CONTRIBUTING.md, architecture.md, and any AI rules files
       [/DOWNSTREAM INSTRUCTIONS]
       ```
-      Apply each instruction as an additional step before committing. If instructions are ambiguous, apply them conservatively and note what was done in the review.
+      Use these instructions as added context to better understand the intent of the commit diff, then apply the changes. If a specific change is ambiguous enough that you're unsure whether it applies, stop and ask the user before continuing. **Never silently skip a change.**
 
    d. **Apply the changes to this project**, adapting them as needed:
       - The starter kit uses a generic app name — map files/modules to this project's equivalents
