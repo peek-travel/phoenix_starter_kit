@@ -1,0 +1,22 @@
+# Files and directories to copy between worktrees when using Worktrunk (worktrunk.dev)
+# Used by: wt step copy-ignored
+# All entries must also be gitignored
+
+# Mix build artifacts
+_build/
+
+# Mix dependencies
+deps/
+
+# Elixir LS files
+.elixir_ls/
+
+# Environment config
+.env
+
+# Compiled JS/CSS assets
+priv/static/assets/
+priv/static/cache_manifest.json
+
+# Node modules for assets
+assets/node_modules/
