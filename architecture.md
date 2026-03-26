@@ -197,7 +197,7 @@ The app receives webhooks from Peek Pro:
 
 - `bin/server`: Start Phoenix with IEx
 - `bin/dev`: Start Cloudflare tunnel for local development
-- `bin/check`: Run tests and code quality checks
+- `make`: Run tests and code quality checks (format, lint, coverage)
 - `bin/rename`: Rename the entire project
 - `bin/sync`: Sync app config with Peek Pro registry
 - `bin/enable-flyio`: Enable Fly.io deployment support (optional)

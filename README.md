@@ -252,7 +252,7 @@ The `bin/` directory contains several useful scripts:
 - **`bin/setup`**: Interactive setup wizard that renames the project, configures deployment platform, and creates version tracking file.
 - **`bin/dev`**: Sets up and runs a Cloudflare tunnel for development. Automatically creates `{app-name}-dev.peeklabs.com` tunnel.
 - **`bin/server`**: Starts the Phoenix server with IEx for development.
-- **`bin/check`**: Runs tests and code quality checks.
+- **`make`**: Runs tests and code quality checks (format, lint, coverage).
 - **`bin/sync`**: Syncs your app configuration with the Peek Pro registry.
 
 ## GitHub Actions

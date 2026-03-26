@@ -8,21 +8,21 @@ This is a **starter kit template** for building Elixir/Phoenix apps that integra
 
 ## Common Commands
 
-- **Full check (format + lint + tests):** `./bin/check` — run this after every task
+- **Full check (format + lint + tests):** `make` — run this after every task
 - **Start dev server:** `bin/server` (runs `iex -S mix phx.server`)
 - **Start with Cloudflare tunnel:** `bin/dev`
-- **Run all tests with coverage:** `mix coveralls.lcov`
+- **Run all tests with coverage:** `make coverage` (runs `mix coveralls.lcov`)
 - **Run a single test file:** `mix test test/path/to_test.exs`
 - **Run a single test by line:** `mix test test/path/to_test.exs:42`
-- **Format code:** `mix format`
-- **Lint:** `mix credo`
-- **Setup (deps + db + assets):** `mix setup`
+- **Format code:** `make fmt`
+- **Lint:** `make lint`
+- **Setup (deps + db + assets):** `make setup`
 - **Reset database:** `mix ecto.reset`
 - **Sync app manifest with registry:** `bin/sync`
 
 ## Test Coverage
 
-100% test coverage is required and enforced in CI. After making changes, always run `./bin/check` to verify formatting, linting, and full test coverage pass.
+100% test coverage is required and enforced in CI. After making changes, always run `make` to verify formatting, linting, and full test coverage pass.
 
 ## Architecture
 
