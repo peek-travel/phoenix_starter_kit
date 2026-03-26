@@ -1,6 +1,10 @@
-.PHONY: help all setup deps fmt fmt-check lint test coverage ci
+.PHONY: all help setup deps fmt fmt-check lint test coverage ci
 
 MIX ?= mix
+
+all:
+	$(MAKE) fmt
+	$(MAKE) ci
 
 help:
 	@echo "Targets: setup, deps, fmt, fmt-check, lint, test, coverage, ci"
@@ -32,5 +36,3 @@ ci:
 	$(MAKE) fmt-check
 	$(MAKE) lint
 	$(MAKE) coverage
-
-all: ci

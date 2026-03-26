@@ -53,7 +53,7 @@ We maintain 100% test coverage. Before submitting a PR, ensure all tests pass:
 
 ```bash
 # Run all tests with coverage
-mix coveralls.lcov
+make coverage
 
 # Run tests in watch mode during development
 mix test.watch
@@ -71,10 +71,10 @@ We use several tools to maintain code quality:
 
 ```bash
 # Format code (required before committing)
-mix format
+make fmt
 
 # Run static analysis
-mix credo
+make lint
 
 # Run all checks (format, credo, tests)
 make
@@ -110,7 +110,7 @@ Add support for custom webhook events
 ### Code Style
 
 - Follow the existing code style
-- Run `mix format` before committing
+- Run `make fmt` before committing
 - Keep functions small and focused
 - Write descriptive variable and function names
 - Add `@doc` and `@moduledoc` for public functions and modules
