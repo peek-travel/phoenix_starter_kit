@@ -24,6 +24,8 @@ This is a **starter kit template** for building Elixir/Phoenix apps that integra
 
 100% test coverage is required and enforced in CI. After making changes, always run `make` to verify formatting, linting, and full test coverage pass.
 
+Never use `# coveralls-ignore-start` / `# coveralls-ignore-end`. If code appears unreachable, ask why it exists — defensive dead code should be removed, not hidden from coverage. Use `coveralls.json` `skip_files` only for generated or infrastructure files (e.g. `application.ex`, `telemetry.ex`) that are already listed there.
+
 ## Architecture
 
 **Phoenix 1.8 + LiveView + Ecto + PostgreSQL.** Bandit HTTP server. TailwindCSS v4 + DaisyUI frontend.
