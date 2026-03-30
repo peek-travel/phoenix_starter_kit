@@ -1,50 +1,56 @@
 ## Default domain translations template.
 ##
-## Use simple keys like "section.field_name" for organization.
+## String-based msgids — use the English text directly as the key.
 ## Platform-specific overrides go in {platform}.po files (optional).
+## Non-English translations go in locale-specific default.po files.
 ##
 ## To add translations:
-## 1. Add msgid here with empty msgstr
+## 1. Add msgid here with empty msgstr (the English string is the key)
 ## 2. Run `mix gettext.merge priv/gettext`
-## 3. Add translations in default.po (and platform .po files if needed)
+## 3. Add platform overrides in platform .po files if needed
 
-## Example keys - replace with your actual translation keys
+## Example keys - replace with your actual strings
 
-msgid "common.save"
+## Auth Messages
+msgid "You must log in to access this page."
 msgstr ""
 
-msgid "common.cancel"
+## Common Actions
+msgid "Save"
 msgstr ""
 
-msgid "common.delete"
+msgid "Cancel"
 msgstr ""
 
-msgid "common.edit"
+msgid "Delete"
 msgstr ""
 
-msgid "common.create"
+msgid "Edit"
 msgstr ""
 
-msgid "common.saving"
+msgid "Create"
+msgstr ""
+
+msgid "Saving..."
 msgstr ""
 
 ## Time Units
-msgid "time.minutes"
+msgid "Minutes"
 msgstr ""
 
-msgid "time.hours"
+msgid "Hours"
 msgstr ""
 
-msgid "time.days"
+msgid "Days"
 msgstr ""
 
 ## Flash Messages
-msgid "flash.saved_successfully"
+msgid "Saved successfully"
 msgstr ""
 
-msgid "flash.deleted_successfully"
+msgid "Deleted successfully"
 msgstr ""
 
-msgid "flash.error_occurred"
+msgid "An error occurred"
 msgstr ""
 

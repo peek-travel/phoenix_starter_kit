@@ -21,6 +21,7 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
 
   import Plug.Conn
   import Phoenix.Controller
+  import PhoenixStarterKitWeb.PlatformGettext
 
   alias PhoenixStarterKit.Partners
   alias PhoenixStarterKit.Repo
@@ -264,7 +265,7 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
     else
       socket =
         socket
-        |> Phoenix.LiveView.put_flash(:error, "You must log in to access this page.")
+        |> Phoenix.LiveView.put_flash(:error, t("You must log in to access this page."))
         |> Phoenix.LiveView.redirect(to: ~p"/")
 
       {:halt, socket}
@@ -353,7 +354,7 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
       conn
     else
       conn
-      |> put_flash(:error, "You must log in to access this page.")
+      |> put_flash(:error, t("You must log in to access this page."))
       |> maybe_store_return_to()
       |> redirect(to: ~p"/")
       |> halt()
