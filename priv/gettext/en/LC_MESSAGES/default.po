@@ -1,43 +1,52 @@
 ## Default domain translations (English).
 ##
-## Base translations - platform .po files can override these.
+## String-based msgids — the English text is the key.
+## Platform overrides go in platform-specific .po files (acme.po, peek.po, etc.).
+## Non-English translations go in the locale's default.po (fr/default.po, etc.).
+##
+## English entries with msgstr "" are tracked by mix gettext.extract;
+## gettext returns the msgid (English) when msgstr is empty.
+
+## Auth Messages
+msgid "You must log in to access this page."
+msgstr "You must log in to access this page."
 
 ## Common Actions
-msgid "common.save"
+msgid "Save"
 msgstr "Save"
 
-msgid "common.cancel"
+msgid "Cancel"
 msgstr "Cancel"
 
-msgid "common.delete"
+msgid "Delete"
 msgstr "Delete"
 
-msgid "common.edit"
+msgid "Edit"
 msgstr "Edit"
 
-msgid "common.create"
+msgid "Create"
 msgstr "Create"
 
-msgid "common.saving"
+msgid "Saving..."
 msgstr "Saving..."
 
 ## Time Units
-msgid "time.minutes"
+msgid "Minutes"
 msgstr "Minutes"
 
-msgid "time.hours"
+msgid "Hours"
 msgstr "Hours"
 
-msgid "time.days"
+msgid "Days"
 msgstr "Days"
 
 ## Flash Messages
-msgid "flash.saved_successfully"
+msgid "Saved successfully"
 msgstr "Saved successfully"
 
-msgid "flash.deleted_successfully"
+msgid "Deleted successfully"
 msgstr "Deleted successfully"
 
-msgid "flash.error_occurred"
+msgid "An error occurred"
 msgstr "An error occurred"
 

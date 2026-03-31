@@ -83,6 +83,7 @@ defmodule PhoenixStarterKitWeb do
     quote do
       # Translation
       use Gettext, backend: PhoenixStarterKitWeb.Gettext
+      import PhoenixStarterKitWeb.PlatformGettext
 
       # HTML escaping functionality
       import Phoenix.HTML

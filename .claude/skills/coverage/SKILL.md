@@ -50,3 +50,4 @@ You are tasked with bringing test coverage to 100%. Work through uncovered files
 - Work one file at a time. Don't try to cover everything at once.
 - If a file is at 100% already, skip it and move on.
 - When writing tests, keep them focused and minimal — cover the missed lines without over-testing.
+- **Never** use `# coveralls-ignore-start` / `# coveralls-ignore-end` to skip lines. If code appears unreachable, ask why it exists — if code is so defensive that it can't be tested, it should be removed, not hidden. Use `coveralls.json` `skip_files` only for generated or infrastructure files already listed there.
