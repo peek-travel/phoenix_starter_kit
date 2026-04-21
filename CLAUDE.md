@@ -59,6 +59,13 @@ Key pipelines in the router:
 
 esbuild bundles two entry points: `app.js` (main app) and `widget_extension.ts` (embeddable widget script). Tailwind v4 with DaisyUI and Heroicons plugins.
 
+### Deployment
+
+`bin/setup` offers three deployment options:
+- **Fly.io** — enables `fly-io/` scripts; use `fly launch` to get started
+- **AWS Fargate (Terraform + ECS)** — enables `aws/` infra; see `docs/aws-setup.md` after running `bin/setup`. Terraform lives in `infra/aws/`, CI/CD in `.github/workflows/aws-deploy-*.yml`.
+- **Other** — strips both platform directories; deploy to any Phoenix-compatible host
+
 ## Code Style
 
 - Formatter line length: **140 characters**

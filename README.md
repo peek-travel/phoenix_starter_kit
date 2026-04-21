@@ -289,6 +289,36 @@ This application can be deployed to any platform that supports Phoenix applicati
 - AWS/GCP/Azure with Docker
 - Your own infrastructure
 
+### Deploying to AWS Fargate
+
+If you selected AWS Fargate during `bin/setup`, the following were automatically added:
+
+- `infra/aws/` — Terraform (ECS Fargate + RDS + ALB + ECR + optional Redis)
+- `Dockerfile` — multi-stage Elixir release build
+- `scripts/tf-sops.sh` — encrypted secrets management via SOPS + KMS
+- `.github/workflows/aws-deploy-sandbox.yml` — CI/CD: merge to `main` → sandbox
+- `.github/workflows/aws-deploy-prod.yml` — CI/CD: GitHub release → prod
+- `docs/aws-setup.md` — full bootstrap and operations guide
+
+**Prerequisites:**
+
+```bash
+brew install awscli terraform sops
+```
+
+**Quick start:**
+
+See `docs/aws-setup.md` for the full step-by-step guide covering IAM setup, Terraform state bootstrap, KMS key creation, SOPS secret encryption, and first deploy.
+
+**Deploy flow:**
+
+| Event | Environment |
+|---|---|
+| Merge to `main` (CI passes) | AWS sandbox |
+| Publish a GitHub release | AWS prod |
+
+**Redis:** Disabled by default. To enable, set `enable_redis = true` in your `terraform.<env>.tfvars` and re-run `terraform apply`.
+
 ### Deploying to Fly.io
 
 If you selected Fly.io during `bin/setup`, the following scripts were automatically added:

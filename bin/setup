@@ -93,14 +93,19 @@ print_status "Which deployment platform will you use?"
 echo "=================================================================="
 echo ""
 echo "  1) Fly.io"
-echo "  2) Other (Render, Heroku, Gigalixir, AWS, etc.)"
+echo "  2) AWS Fargate (Terraform + ECS)"
+echo "  3) Other (Render, Heroku, Gigalixir, etc.)"
 echo ""
-read -p "Enter choice (1 or 2): " PLATFORM_CHOICE
+read -p "Enter choice (1, 2, or 3): " PLATFORM_CHOICE
 
 case $PLATFORM_CHOICE in
   1)
     PLATFORM="flyio"
     print_success "Selected: Fly.io"
+    ;;
+  2)
+    PLATFORM="aws"
+    print_success "Selected: AWS Fargate"
     ;;
   *)
     PLATFORM="other"
@@ -178,7 +183,22 @@ if [ "$PLATFORM" = "flyio" ]; then
   else
     print_warning "bin/enable-flyio not found. Fly.io setup skipped."
   fi
-else
+  print_status "Removing AWS Fargate files..."
+  if [ -d "aws" ]; then
+    rm -rf aws
+    print_success "Removed aws/ directory"
+  fi
+  if [ -f "bin/enable-aws" ]; then
+    rm bin/enable-aws
+    print_success "Removed bin/enable-aws"
+  fi
+elif [ "$PLATFORM" = "aws" ]; then
+  print_status "Setting up AWS Fargate deployment support..."
+  if [ -f "bin/enable-aws" ]; then
+    bin/enable-aws
+  else
+    print_warning "bin/enable-aws not found. AWS setup skipped."
+  fi
   print_status "Removing Fly.io specific files..."
   if [ -d "fly-io" ]; then
     rm -rf fly-io
@@ -187,6 +207,24 @@ else
   if [ -f "bin/enable-flyio" ]; then
     rm bin/enable-flyio
     print_success "Removed bin/enable-flyio"
+  fi
+else
+  print_status "Removing platform-specific files..."
+  if [ -d "fly-io" ]; then
+    rm -rf fly-io
+    print_success "Removed fly-io/ directory"
+  fi
+  if [ -f "bin/enable-flyio" ]; then
+    rm bin/enable-flyio
+    print_success "Removed bin/enable-flyio"
+  fi
+  if [ -d "aws" ]; then
+    rm -rf aws
+    print_success "Removed aws/ directory"
+  fi
+  if [ -f "bin/enable-aws" ]; then
+    rm bin/enable-aws
+    print_success "Removed bin/enable-aws"
   fi
 fi
 
@@ -226,6 +264,11 @@ if [ "$PLATFORM" = "flyio" ]; then
   echo "Fly.io deployment:"
   echo "  - Run 'fly launch' to create your app"
   echo "  - See README.md for full deployment instructions"
+  echo ""
+elif [ "$PLATFORM" = "aws" ]; then
+  echo "AWS Fargate deployment:"
+  echo "  - See docs/aws-setup.md for full bootstrap instructions"
+  echo "  - Terraform infra is in infra/aws/"
   echo ""
 fi
 

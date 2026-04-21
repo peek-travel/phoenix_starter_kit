@@ -1,0 +1,19 @@
+# Terraform working directory
+.terraform/
+.terraform.lock.hcl
+
+# Local state (should use remote backend — see main.tf)
+*.tfstate
+*.tfstate.backup
+
+# Decrypted secrets (auto-loaded by Terraform; written by scripts/tf-sops.sh decrypt)
+*.auto.tfvars.json
+
+# Plaintext secrets input files (encrypt with scripts/tf-sops.sh, then delete)
+secrets.*.json
+!secrets.example.json
+
+# Per-environment variable files (contain domain, sizing — not secrets, but gitignored
+# to avoid accidental commits of env-specific config into a shared template)
+terraform.tfvars
+terraform.*.tfvars

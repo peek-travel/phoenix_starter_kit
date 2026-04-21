@@ -1,0 +1,20 @@
+# SOPS — maps each secret file to the KMS key that encrypts/decrypts it.
+# Sandbox and prod live in DIFFERENT AWS accounts and regions, so each env
+# gets its own key. Bootstrap the keys once per account — see
+# docs/aws-setup.md Phase 2.
+#
+# AWS account IDs below are committed intentionally: they are not secrets
+# (KMS ARNs must be fully qualified for SOPS, and account IDs already appear
+# in committed OIDC role ARNs elsewhere in this repo). The alternative —
+# keeping placeholders and having every operator run `sed` after checkout —
+# is more friction for no real security gain.
+#
+# Replace <SANDBOX_ACCOUNT_ID> and <PROD_ACCOUNT_ID> with your AWS account IDs
+# as part of the bootstrap in docs/aws-setup.md Phase 2.
+
+creation_rules:
+  - path_regex: secrets\.sandbox\.enc\.json$
+    kms: arn:aws:kms:us-west-2:<SANDBOX_ACCOUNT_ID>:alias/phoenix-starter-kit-sandbox-sops
+
+  - path_regex: secrets\.prod\.enc\.json$
+    kms: arn:aws:kms:us-west-1:<PROD_ACCOUNT_ID>:alias/phoenix-starter-kit-prod-sops

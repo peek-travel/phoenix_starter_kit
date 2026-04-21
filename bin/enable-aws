@@ -1,0 +1,69 @@
+#!/bin/bash
+set -e
+
+echo "🚀 Enabling AWS Fargate deployment support..."
+echo ""
+
+# Check if aws directory exists
+if [ ! -d "aws" ]; then
+  echo "❌ Error: aws directory not found"
+  echo "   This script should be run from the project root"
+  exit 1
+fi
+
+# Create destination directories if needed
+mkdir -p infra/aws scripts .github/workflows
+
+# Move Terraform infra
+echo "📋 Moving Terraform infra to infra/aws/..."
+cp -r aws/infra/. infra/aws/
+echo "   ✅ infra/aws/ ready"
+
+# Move GitHub Actions workflows
+echo "📋 Moving CI/CD workflows to .github/workflows/..."
+cp aws/workflows/aws-deploy-sandbox.yml .github/workflows/aws-deploy-sandbox.yml
+cp aws/workflows/aws-deploy-prod.yml .github/workflows/aws-deploy-prod.yml
+echo "   ✅ Workflows copied"
+
+# Move Dockerfile to project root
+echo "📋 Copying Dockerfile to project root..."
+cp aws/Dockerfile ./Dockerfile
+echo "   ✅ Dockerfile ready"
+
+# Move tf-sops script
+echo "📋 Moving scripts/tf-sops.sh..."
+cp aws/scripts/tf-sops.sh scripts/tf-sops.sh
+chmod +x scripts/tf-sops.sh
+echo "   ✅ scripts/tf-sops.sh ready"
+
+# Move setup guide to docs/
+echo "📋 Moving setup guide to docs/aws-setup.md..."
+mkdir -p docs
+cp aws/README.md docs/aws-setup.md
+echo "   ✅ docs/aws-setup.md ready"
+
+# Clean up aws directory (no longer needed)
+echo "🧹 Cleaning up aws/ directory..."
+rm -rf aws
+echo "   ✅ aws/ directory removed"
+
+echo ""
+echo "✅ AWS Fargate support enabled!"
+echo ""
+echo "Prerequisites (install if not already present):"
+echo "   brew install awscli terraform sops"
+echo ""
+echo "Next steps:"
+echo "1. See docs/aws-setup.md for full bootstrap instructions"
+echo "2. Create IAM users and configure AWS CLI profiles"
+echo "3. Bootstrap Terraform state S3 bucket + DynamoDB lock table"
+echo "4. Create KMS keys for SOPS secret encryption"
+echo "5. Fill in infra/aws/secrets.example.json → encrypt with scripts/tf-sops.sh"
+echo "6. Run: cd infra/aws && terraform init -backend-config=backend.sandbox.hcl"
+echo "7. Run: terraform plan -var-file=terraform.sandbox.tfvars"
+echo "8. Add GitHub secret AWS_DEPLOY_ROLE_ARN_SANDBOX (from terraform output)"
+echo ""
+echo "Deploy flow:"
+echo "   Merge to main (CI passes) → AWS sandbox"
+echo "   Publish a GitHub release   → AWS prod"
+echo ""

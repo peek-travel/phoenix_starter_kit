@@ -1,0 +1,172 @@
+name: AWS Deploy Sandbox
+
+on:
+  workflow_run:
+    workflows: ["Elixir CI"]
+    branches: [main]
+    types: [completed]
+
+env:
+  AWS_REGION: us-west-2
+  ECR_REPOSITORY: phoenix-starter-kit
+  ECS_CLUSTER: phoenix-starter-kit-sandbox-cluster
+  ECS_SERVICE: phoenix-starter-kit-sandbox-app
+
+jobs:
+  deploy-aws-sandbox:
+    name: Build & Deploy to AWS Sandbox ECS
+    runs-on: ubuntu-latest
+    concurrency: aws-sandbox-deploy-group
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN_SANDBOX }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push Docker image
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          docker build \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Register new task definition
+        id: register-task-def
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          # Pull current task definition and swap in the new image
+          CURRENT=$(aws ecs describe-task-definition \
+            --task-definition $ECS_SERVICE \
+            --query 'taskDefinition' \
+            --output json)
+
+          NEW_DEF=$(echo "$CURRENT" | jq \
+            --arg IMAGE "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
+            'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.placementConstraints,.compatibilities,.registeredAt,.registeredBy,.deregisteredAt)
+             | .containerDefinitions[0].image = $IMAGE')
+
+          TASK_DEF_ARN=$(aws ecs register-task-definition \
+            --cli-input-json "$NEW_DEF" \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+
+          echo "Registered: $TASK_DEF_ARN"
+          echo "task-def-arn=$TASK_DEF_ARN" >> $GITHUB_OUTPUT
+
+      - name: Run database migrations
+        run: |
+          SERVICE_STATUS=$(aws ecs describe-services \
+            --cluster $ECS_CLUSTER \
+            --services $ECS_SERVICE \
+            --query 'services[0].status' \
+            --output text 2>/dev/null || echo "MISSING")
+
+          if [ "$SERVICE_STATUS" = "MISSING" ] || [ "$SERVICE_STATUS" = "None" ]; then
+            echo "Service does not exist yet — skipping migrations on first deploy."
+            exit 0
+          fi
+
+          NETWORK_CONFIG=$(aws ecs describe-services \
+            --cluster $ECS_CLUSTER \
+            --services $ECS_SERVICE \
+            --query 'services[0].networkConfiguration' \
+            --output json)
+
+          TASK_ARN=$(aws ecs run-task \
+            --cluster $ECS_CLUSTER \
+            --task-definition ${{ steps.register-task-def.outputs.task-def-arn }} \
+            --launch-type FARGATE \
+            --network-configuration "$NETWORK_CONFIG" \
+            --overrides '{"containerOverrides":[{"name":"app","command":["/app/bin/migrate"]}]}' \
+            --query 'tasks[0].taskArn' \
+            --output text)
+
+          echo "Migration task: $TASK_ARN"
+
+          if ! aws ecs wait tasks-stopped --cluster $ECS_CLUSTER --tasks $TASK_ARN; then
+            echo "Timed out waiting for migration task to stop"
+            exit 1
+          fi
+
+          LAST_STATUS=$(aws ecs describe-tasks \
+            --cluster $ECS_CLUSTER \
+            --tasks $TASK_ARN \
+            --query 'tasks[0].lastStatus' \
+            --output text)
+
+          if [ "$LAST_STATUS" != "STOPPED" ]; then
+            echo "Migration task did not reach STOPPED state (lastStatus: $LAST_STATUS)"
+            exit 1
+          fi
+
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster $ECS_CLUSTER \
+            --tasks $TASK_ARN \
+            --query 'tasks[0].containers[0].exitCode' \
+            --output text)
+
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "Migration failed with exit code $EXIT_CODE"
+            exit 1
+          fi
+          echo "Migrations completed successfully"
+
+      - name: Deploy to ECS (rolling update)
+        run: |
+          aws ecs update-service \
+            --cluster $ECS_CLUSTER \
+            --service $ECS_SERVICE \
+            --task-definition ${{ steps.register-task-def.outputs.task-def-arn }} \
+            --query 'service.serviceName' \
+            --output text
+          echo "Deployment triggered — ECS will roll out new tasks"
+
+      - name: Wait for deployment to stabilize
+        run: |
+          aws ecs wait services-stable \
+            --cluster $ECS_CLUSTER \
+            --services $ECS_SERVICE
+          echo "Deployment stable"
+
+      - name: Notify Slack (AWS sandbox deploy success)
+        if: ${{ success() }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "SLACK_WEBHOOK_URL not set; skipping Slack notification."
+            exit 0
+          fi
+
+          HEAD_SHA="${{ github.event.workflow_run.head_sha }}"
+          SHORT_SHA="${HEAD_SHA::7}"
+          COMMIT_URL="https://github.com/${GITHUB_REPOSITORY}/commit/${HEAD_SHA}"
+          RUN_URL="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          COMMIT_MSG=$(git log -1 --pretty=%B | head -n 1 | sed 's/"/\\"/g')
+
+          curl -X POST -H 'Content-type: application/json' \
+            --data "{\"text\":\"✅ AWS Sandbox deploy succeeded: <${COMMIT_URL}|${SHORT_SHA}> - ${COMMIT_MSG} (run: <${RUN_URL}|details>)\"}" \
+            "$SLACK_WEBHOOK_URL"
