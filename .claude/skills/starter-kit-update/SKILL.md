@@ -20,14 +20,14 @@ You are tasked with backporting the latest changes from the `phoenix_starter_kit
    Read `.phoenix_starter_kit_version` — it contains the last backported commit SHA from the starter kit.
 
 3. **Fetch the starter kit commit history.**
-   Use `gh` to get the commit log on `master` from the starter kit repo, starting after the SHA in `.phoenix_starter_kit_version` up to the latest:
+   Use `gh` to get the commit log on `main` from the starter kit repo, starting after the SHA in `.phoenix_starter_kit_version` up to the latest:
    ```bash
    # Get current version
    CURRENT_SHA=$(cat .phoenix_starter_kit_version | tr -d '[:space:]')
 
    # Get commits after our current version (oldest first)
-   gh api repos/peek-travel/phoenix_starter_kit/commits?sha=master\&per_page=100 \
-     --jq '.[].sha' | tac
+   gh api "repos/peek-travel/phoenix_starter_kit/commits?sha=main&per_page=100" \
+     --jq '[.[].sha] | reverse | .[]'
    ```
    Filter commits to only those **after** `$CURRENT_SHA`. If there are no new commits, stop and inform the user.
 
@@ -107,6 +107,13 @@ You are tasked with backporting the latest changes from the `phoenix_starter_kit
    ```bash
    git push -u origin HEAD
    ```
+
+9. **Open a pull request.**
+   Use the `/pr` skill to open the PR. When asked for the base branch, use `main`. The PR title must be a valid Conventional Commit — use:
+   ```
+   chore: sync upstream starter kit changes (<short-SHA>..<short-SHA>)
+   ```
+   where the SHAs are the first and last starter kit commits applied. In the `What` section of the PR body, summarise the backported commits and call out any downstream instructions that were applied.
 
 ## Important Notes
 
