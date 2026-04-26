@@ -1,0 +1,366 @@
+#!/usr/bin/env bash
+# bin/release — SOC II/PCI compliant release workflow with Conventional Commits
+# Requires: gh, git, convco (brew install convco), jq (brew install jq)
+#
+# Usage:
+#   bin/release init                # one-time setup: release branch + branch protection
+#                                   # idempotent — re-run any time to restore protection
+#   bin/release open [version]      # open review PR — version auto-detected if omitted
+#   bin/release publish [version]   # after PR merged: tag + GitHub release
+#
+# Optional env var:
+#   SLACK_WEBHOOK_URL               # post notifications to Slack when set
+
+set -euo pipefail
+
+REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+RELEASE_BRANCH="release"
+
+# ──────────────────────────────────────────────
+# HELPERS
+# ──────────────────────────────────────────────
+require_convco() {
+  if ! command -v convco &>/dev/null; then
+    echo "Error: convco not installed. Run: brew install convco"
+    exit 1
+  fi
+}
+
+get_prev_tag() {
+  git fetch --tags origin --quiet
+  local tags
+  tags=$(git tag --sort=-version:refname 2>/dev/null)
+  [[ -z "$tags" ]] && return
+  echo "$tags" | head -1
+}
+
+# Determine next version:
+# - Use provided version if given
+# - Otherwise ask convco to bump based on commits since last tag
+resolve_version() {
+  local provided="${1:-}"
+  if [[ -n "$provided" ]]; then
+    echo "$provided"
+    return
+  fi
+
+  require_convco
+  local prev_tag
+  prev_tag=$(get_prev_tag)
+
+  if [[ -z "$prev_tag" ]]; then
+    echo "1.0.0"
+    return
+  fi
+
+  local bumped
+  bumped=$(convco version --bump 2>/dev/null || echo "")
+  if [[ -z "$bumped" ]]; then
+    echo "Error: convco could not determine next version. Check commit messages follow Conventional Commits."
+    echo "  See: https://www.conventionalcommits.org"
+    exit 1
+  fi
+
+  echo "$bumped"
+}
+
+# Extract PR numbers from commit messages since a given ref and format as markdown links.
+# GitHub squash merges append "(#NNN)" to the commit subject, so this is reliable.
+get_merged_pr_lines() {
+  local since_ref="$1"
+  local log_output
+  if ! log_output=$(git log "${since_ref}..HEAD" --pretty=format:"%s" 2>/dev/null); then
+    echo "_Unable to read commit history — add PRs manually._"
+    return
+  fi
+
+  local lines
+  lines=$(echo "$log_output" \
+    | grep -oE '\(#[0-9]+\)' \
+    | grep -oE '[0-9]+' \
+    | sort -rn \
+    | while read -r num; do
+        echo "- [#${num}](https://github.com/${REPO}/pull/${num})"
+      done)
+
+  if [[ -z "$lines" ]]; then
+    echo "_No linked PRs found — add manually if needed._"
+  else
+    echo "$lines"
+  fi
+}
+
+# Post to Slack. All arguments are forwarded to jq -cn so every dynamic value
+# must be passed as a --arg flag (e.g. --arg version "1.2.3"). jq --arg always
+# treats values as plain strings, so there is no injection risk regardless of
+# content. The final positional argument should be the jq expression.
+# IMPORTANT: the jq expression must be a hardcoded string literal — never
+# construct it from user input or external data.
+# Usage: slack_post --arg version "1.2.3" --arg url "..." '{text: $version}'
+slack_post() {
+  [[ -z "${SLACK_WEBHOOK_URL:-}" ]] && return
+  if ! command -v jq &>/dev/null; then
+    echo "Warning: jq not installed — Slack notification skipped. Run: brew install jq"
+    return
+  fi
+  local payload
+  if ! payload=$(jq -cn "$@" 2>&1); then
+    echo "Warning: failed to build Slack payload — $payload"
+    return
+  fi
+  if ! echo "$payload" | curl -sf -X POST "$SLACK_WEBHOOK_URL" \
+    -H "Content-Type: application/json" \
+    --data-binary @- \
+    > /dev/null; then
+    echo "Warning: Slack notification failed (HTTP error or network issue)"
+  fi
+}
+
+# ──────────────────────────────────────────────
+# INIT — run once per repo
+# ──────────────────────────────────────────────
+cmd_init() {
+  echo "→ Setting up release branch for $REPO"
+
+  # Create release branch from main if it doesn't exist
+  if git ls-remote --exit-code origin "$RELEASE_BRANCH" &>/dev/null; then
+    echo "  ✓ '$RELEASE_BRANCH' branch already exists on origin"
+  else
+    git fetch origin main --quiet
+    git checkout -B "$RELEASE_BRANCH" origin/main
+    git push origin "$RELEASE_BRANCH"
+    echo "  ✓ Created '$RELEASE_BRANCH' branch"
+  fi
+
+  # Branch protection for SOC II/PCI compliance:
+  #   enforce_admins=true           — admins must go through review, no bypass
+  #   require_last_push_approval    — the person who last pushed cannot self-approve
+  #                                   (separation of duties)
+  gh api \
+    --method PUT \
+    -H "Accept: application/vnd.github+json" \
+    "/repos/$REPO/branches/$RELEASE_BRANCH/protection" \
+    --field required_status_checks=null \
+    --field enforce_admins=true \
+    --field "required_pull_request_reviews[required_approving_review_count]=1" \
+    --field "required_pull_request_reviews[dismiss_stale_reviews]=true" \
+    --field "required_pull_request_reviews[require_last_push_approval]=true" \
+    --field "restrictions=null" \
+    > /dev/null
+
+  echo "  ✓ Branch protection set (1 reviewer required, stale reviews dismissed, admins included, self-approval blocked)"
+
+  # Create the 'release' label so bin/release open can apply it — the pr-title.yml
+  # workflow exempts PRs with this label from Conventional Commits validation.
+  gh api \
+    --method POST \
+    -H "Accept: application/vnd.github+json" \
+    "/repos/$REPO/labels" \
+    --field name="release" \
+    --field color="0075ca" \
+    --field description="Release PR — exempt from Conventional Commits title check" \
+    > /dev/null 2>&1 || true  # ignore if label already exists
+
+  echo "  ✓ 'release' label created (or already exists)"
+
+  if [[ ! -f ".convco" ]]; then
+    cat > .convco << 'EOF'
+[commit]
+# Enforce conventional commit format on this repo
+# Types: feat, fix, chore, docs, style, refactor, perf, test, ci, build
+EOF
+    echo "  ✓ Created .convco config"
+  fi
+
+  echo ""
+  echo "Done. Recommended next steps:"
+  echo "  brew install convco   # version bumping"
+  echo "  brew install jq       # Slack notifications"
+  echo ""
+  echo "Then when ready to release:"
+  echo "  bin/release open             # auto-detects version from commits"
+  echo "  bin/release open 1.7.0       # or specify manually"
+  echo ""
+  echo "Note: init is idempotent — re-run it any time to restore branch protection settings."
+}
+
+# ──────────────────────────────────────────────
+# OPEN — open the review PR
+# ──────────────────────────────────────────────
+cmd_open() {
+  local version
+  version=$(resolve_version "${1:-}")
+
+  local prev_tag
+  prev_tag=$(get_prev_tag)
+
+  echo "→ Opening release PR for $version (previous: ${prev_tag:-none})"
+
+  local changelog=""
+  if command -v convco &>/dev/null && [[ -n "$prev_tag" ]]; then
+    changelog=$(convco changelog "${prev_tag}..HEAD" 2>/dev/null || echo "")
+  fi
+
+  local compare_url
+  if [[ -n "$prev_tag" ]]; then
+    compare_url="https://github.com/$REPO/compare/${prev_tag}...main"
+  else
+    compare_url="https://github.com/$REPO/commits/main"
+  fi
+
+  local pr_links="_No linked PRs found — add manually if needed._"
+  if [[ -n "$prev_tag" ]]; then
+    pr_links=$(get_merged_pr_lines "$prev_tag")
+  fi
+
+  local pr_body
+  pr_body=$(cat << EOF
+## Description
+
+Release $version — promoting \`main\` → \`$RELEASE_BRANCH\`.
+
+**Previous release:** \`${prev_tag:-none}\`
+**Full diff:** $compare_url
+
+---
+
+## Included PRs
+
+${pr_links}
+
+---
+
+## Changelog
+
+${changelog:-"_No conventional commits found — add release notes manually._"}
+
+---
+
+## Risk Assessment
+
+**Deployment risk:** Low / Medium / High
+<!-- Explain why: new migrations, config changes, third-party integrations affected? -->
+
+**Affected systems:**
+<!-- List services, integrations, or user flows impacted -->
+
+**Rollback plan:**
+<!-- How to revert if the prod deployment fails (e.g. roll back deploy, run down migrations) -->
+
+---
+
+## Reviewer Checklist
+
+- [ ] All changes were merged via PR (no direct commits to main)
+- [ ] Each PR had at least 1 approval
+- [ ] Sandbox verified after merge to main
+- [ ] No secrets or credentials in diff
+- [ ] DB migrations are backward compatible
+- [ ] No breaking changes without deprecation notice
+EOF
+)
+
+  local pr_url
+  pr_url=$(gh pr create \
+    --base "$RELEASE_BRANCH" \
+    --head main \
+    --title "Release $version" \
+    --label "release" \
+    --body "$pr_body")
+
+  echo "✓ PR opened: $pr_url"
+  echo "  Version: $version"
+  echo "  Diff:    $compare_url"
+  echo ""
+  echo "Once approved and merged, run: bin/release publish $version"
+
+  slack_post \
+    --arg version "$version" \
+    --arg repo "$REPO" \
+    --arg pr_url "$pr_url" \
+    --arg diff_url "$compare_url" \
+    '{text: (":rocket: *Release PR opened — `" + $version + "`*\nRepo: " + $repo + "\nPR: " + $pr_url + "\nDiff: " + $diff_url)}'
+}
+
+# ──────────────────────────────────────────────
+# PUBLISH — tag + GitHub release after PR merge
+# ──────────────────────────────────────────────
+cmd_publish() {
+  local version
+  version=$(resolve_version "${1:-}")
+
+  # Verify the PR was actually merged (can't skip review)
+  local merged
+  merged=$(gh pr list \
+    --base "$RELEASE_BRANCH" \
+    --head main \
+    --state merged \
+    --json title \
+    --jq ".[0].title" 2>/dev/null || echo "")
+
+  if [[ -z "$merged" ]]; then
+    echo "Error: no merged PR found from main → $RELEASE_BRANCH"
+    echo "  The review PR must be approved and merged before publishing."
+    exit 1
+  fi
+
+  git fetch --tags origin --quiet
+  git fetch origin "$RELEASE_BRANCH" --quiet
+
+  # Capture prev_tag before creating the new tag so no filtering is needed
+  local prev_tag
+  prev_tag=$(git tag --sort=-version:refname | head -1 || true)
+
+  local sha
+  sha=$(git rev-parse "origin/$RELEASE_BRANCH")
+
+  git tag "$version" "$sha"
+  git push origin "$version"
+  echo "✓ Tagged $version at ${sha:0:8}"
+
+  local release_url
+  if [[ -n "$prev_tag" ]]; then
+    release_url=$(gh release create "$version" \
+      --target "$RELEASE_BRANCH" \
+      --title "Release $version" \
+      --generate-notes \
+      --notes-start-tag "$prev_tag")
+  else
+    release_url=$(gh release create "$version" \
+      --target "$RELEASE_BRANCH" \
+      --title "Release $version" \
+      --generate-notes)
+  fi
+
+  local diff_url
+  if [[ -n "$prev_tag" ]]; then
+    diff_url="https://github.com/$REPO/compare/${prev_tag}...${version}"
+  else
+    diff_url="https://github.com/$REPO/commits/${version}"
+  fi
+  echo "✓ GitHub release: $release_url"
+  echo "  Diff: $diff_url"
+
+  slack_post \
+    --arg version "$version" \
+    --arg repo "$REPO" \
+    --arg release_url "$release_url" \
+    --arg diff_url "$diff_url" \
+    '{text: (":white_check_mark: *Release `" + $version + "` published!*\nRepo: " + $repo + "\nRelease: " + $release_url + "\nDiff: " + $diff_url)}'
+}
+
+# ──────────────────────────────────────────────
+# ROUTER
+# ──────────────────────────────────────────────
+case "${1:-}" in
+  init)    cmd_init ;;
+  open)    cmd_open "${2:-}" ;;
+  publish) cmd_publish "${2:-}" ;;
+  *)
+    echo "Usage:"
+    echo "  bin/release init              # one-time setup per repo"
+    echo "  bin/release open [version]    # open review PR (version auto-detected if omitted)"
+    echo "  bin/release publish [version] # tag + publish after PR is merged"
+    exit 1
+    ;;
+esac

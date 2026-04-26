@@ -252,14 +252,87 @@ The `bin/` directory contains several useful scripts:
 - **`bin/setup`**: Interactive setup wizard that renames the project, configures deployment platform, and creates version tracking file.
 - **`bin/dev`**: Sets up and runs a Cloudflare tunnel for development. Automatically creates `{app-name}-dev.peeklabs.com` tunnel.
 - **`bin/server`**: Starts the Phoenix server with IEx for development.
+- **`bin/release`**: SOC II/PCI compliant release workflow — see [Release Workflow](#release-workflow) below.
 - **`make`**: Runs tests and code quality checks (format, lint, coverage).
 - **`bin/sync`**: Syncs your app configuration with the Peek Pro registry.
 
+## Release Workflow
+
+Releases follow a SOC II/PCI compliant review-before-deploy flow using a permanent `release` branch. The `release` branch always represents what is running in production. All releases require a reviewed and approved PR from `main` → `release`.
+
+### Prerequisites
+
+```bash
+brew install convco   # auto-detects next version from Conventional Commits
+brew install jq       # required for Slack notifications
+```
+
+### First-time setup (run once per repo by a repo owner)
+
+```bash
+bin/release init
+```
+
+**Idempotent** — re-run any time to restore branch protection if settings are accidentally changed.
+
+What it does:
+- Creates the `release` branch from `main` (if it doesn't exist)
+- Locks the `release` branch: PRs required, 1 reviewer, stale reviews dismissed, admins included, last-pusher cannot self-approve
+- Creates the `release` GitHub label (exempts release PRs from the title lint check)
+- Creates a `.convco` config if one doesn't exist
+
+**Why `main` is intentionally unprotected:** `main` maps to the sandbox environment — developers push freely for fast iteration. Only `release` maps to production, making it the sole compliance gate. Every production change must arrive via a reviewed PR to `release`, satisfying SOC II CC8.1 and PCI DSS 6.3.x change-management requirements.
+
+### Opening a release PR
+
+```bash
+bin/release open             # version auto-detected from commits (e.g. feat → minor bump)
+bin/release open 1.7.0       # or specify manually
+```
+
+This opens a PR from `main` → `release` with:
+- List of all merged PRs since the last release (linked)
+- Auto-generated changelog from Conventional Commits
+- Risk assessment and reviewer checklist
+- Slack notification (if `SLACK_WEBHOOK_URL` is set)
+
+### Publishing after the PR is merged
+
+```bash
+bin/release publish             # version auto-detected
+bin/release publish 1.7.0       # or specify manually
+```
+
+This tags the `release` branch at the merged SHA, creates a GitHub release with auto-generated notes, and posts a Slack notification.
+
+### Slack notifications
+
+Set `SLACK_WEBHOOK_URL` in your environment (or `.env`) to receive notifications on `open` and `publish`. The webhook URL is never committed — set it as a secret or in your shell profile.
+
+### Commit message format
+
+PR titles must follow [Conventional Commits](https://www.conventionalcommits.org):
+
+```
+feat: add support for custom webhook events
+fix: resolve partner authentication timeout
+chore: update dependencies
+docs: update deployment instructions
+```
+
+The allowed types are: `feat`, `fix`, `chore`, `docs`, `style`, `refactor`, `perf`, `test`, `ci`, `build`.
+
+GitHub squash-merges use the PR title as the commit message, so writing one conventional title per PR is enough — every commit in `main` will be Conventional Commits-compliant automatically. This is what powers `convco version --bump` and `convco changelog`.
+
 ## GitHub Actions
+
+### PR Title Linting
+
+`.github/workflows/pr-title.yml` enforces Conventional Commits format on every PR title. The check runs on open, edit, and synchronize events. Release PRs opened by `bin/release` are labelled `release` and exempted automatically.
 
 ### Augment PR Review
 
-The repository includes an automated PR review workflow using Augment AI (`.github/workflows/augment-pr-review.yml`).
+`.github/workflows/augment-pr-review.yml` — automated PR review using Augment AI.
 
 **Setup:**
 

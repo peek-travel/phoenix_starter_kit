@@ -92,20 +92,25 @@ Use descriptive branch names:
 
 ### Commit Messages
 
-Write clear, descriptive commit messages:
+PR titles must follow [Conventional Commits](https://www.conventionalcommits.org) format — the CI check enforces this. Since GitHub squash-merges use the PR title as the commit message, writing a conventional title per PR is sufficient.
+
+**Format:** `type: short description` (or `type(scope): short description`)
 
 ```
-Add support for custom webhook events
-
-- Implement webhook event registry
-- Add tests for custom event handling
-- Update documentation with examples
+feat: add support for custom webhook events
+fix: resolve partner authentication timeout
+chore: update dependencies
+docs: update deployment instructions
+refactor: simplify partner user context
 ```
 
-**Format:**
-- First line: Brief summary (50 chars or less)
-- Blank line
-- Detailed description with bullet points if needed
+Allowed types: `feat`, `fix`, `chore`, `docs`, `style`, `refactor`, `perf`, `test`, `ci`, `build`.
+
+- `feat` → minor version bump
+- `feat!` or `fix!` (breaking change) → major version bump
+- anything else → patch version bump
+
+These rules drive `bin/release open`, which calls `convco version --bump` to determine the next version automatically.
 
 ### Code Style
 
@@ -153,13 +158,14 @@ Add support for custom webhook events
 
 ### PR Title Format
 
-Use conventional commit format:
-- `feat: Add webhook retry mechanism`
-- `fix: Resolve partner authentication timeout`
-- `docs: Update deployment instructions`
-- `refactor: Simplify partner user context`
-- `test: Add integration tests for webhooks`
-- `chore: Update dependencies`
+PR titles are linted automatically by `.github/workflows/pr-title.yml`. Use Conventional Commits format:
+
+- `feat: add webhook retry mechanism`
+- `fix: resolve partner authentication timeout`
+- `docs: update deployment instructions`
+- `refactor: simplify partner user context`
+- `test: add integration tests for webhooks`
+- `chore: update dependencies`
 
 ### PR Description
 
