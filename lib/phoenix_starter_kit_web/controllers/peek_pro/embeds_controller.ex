@@ -59,7 +59,7 @@ defmodule PhoenixStarterKitWeb.PeekPro.EmbedsController do
     |> render(:expired)
   end
 
-  defp locale_from_peek_auth(%{assigns: %{peek_verified_claims: %{"locale" => locale}}})
+  defp locale_from_peek_auth(%{assigns: %{peek_account_user: %{locale: locale}}})
        when is_binary(locale) and locale != "",
        do: locale
 
