@@ -25,10 +25,11 @@ jobs:
           github-token: ${{ secrets.PAT_GITHUB_TOKEN }}
           script: |
             const { data: bot } = await github.rest.users.getAuthenticated();
-            const { data: reviews } = await github.rest.pulls.listReviews({
+            const reviews = await github.paginate(github.rest.pulls.listReviews, {
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: context.payload.pull_request.number,
+              per_page: 100,
             });
             const outdated = reviews.filter(r =>
               r.user.login === bot.login &&
@@ -166,10 +167,11 @@ jobs:
             const { data: bot } = await github.rest.users.getAuthenticated();
 
             // Skip if bot already has an active formal review for this commit
-            const { data: reviews } = await github.rest.pulls.listReviews({
+            const reviews = await github.paginate(github.rest.pulls.listReviews, {
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: pr_number,
+              per_page: 100,
             });
             const hasActiveFormal = reviews.some(r =>
               r.user.login === bot.login &&
@@ -244,10 +246,11 @@ jobs:
             const triggerState = context.payload.review.state.toUpperCase();
             if (triggerState !== 'APPROVED' && triggerState !== 'CHANGES_REQUESTED') return;
 
-            const { data: reviews } = await github.rest.pulls.listReviews({
+            const reviews = await github.paginate(github.rest.pulls.listReviews, {
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: context.payload.pull_request.number,
+              per_page: 100,
             });
             const outdated = reviews.filter(r =>
               r.user.login === bot.login &&
