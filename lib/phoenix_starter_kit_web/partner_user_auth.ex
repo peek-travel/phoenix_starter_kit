@@ -9,7 +9,7 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
   Authentication flow for iframe-embedded contexts (e.g. peek-pro app-store):
   1. The parent app POSTs a peek-auth token to /peek-pro/settings
   2. EmbedsController verifies the token, upserts the partner user, and
-     generates a signed Phoenix.Token containing {partner_user_id, partner_id}
+     generates a signed Phoenix.Token containing {partner_user_id, partner_id, locale}
   3. The user is redirected to /settings?auth_token=<token>
   4. `fetch_partner_user_from_auth_token` verifies the token and assigns the user
   5. `live_session_data` embeds the auth_token into the LiveView's phx-session
@@ -99,8 +99,9 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
   """
   def fetch_partner_user_from_auth_token(conn, _opts) do
     with token when is_binary(token) <- conn.params["auth_token"],
-         {:ok, {partner_user_id, partner_id}} <-
+         {:ok, token_data} <-
            Phoenix.Token.verify(PhoenixStarterKitWeb.Endpoint, "partner_auth", token, max_age: @auth_token_max_age),
+         {partner_user_id, partner_id, locale} <- normalize_token_data(token_data),
          %{} = partner_user <- Partners.get_partner_user(partner_user_id) do
       partner_user = Partners.set_current_partner(partner_user, partner_id)
 
@@ -108,6 +109,7 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
       |> assign(:current_partner_user, partner_user)
       |> assign(:current_partner, partner_user.partner)
       |> assign(:auth_token, token)
+      |> assign(:locale, locale)
       # Persist auth_token in the session so it survives page reloads when
       # the URL no longer contains it. In an iframe on Safari the session
       # cookie is blocked,
@@ -131,8 +133,9 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
       # First try to restore from a session-persisted auth_token (set by
       # fetch_partner_user_from_auth_token on a previous request).
       with token when is_binary(token) <- get_session(conn, :auth_token),
-           {:ok, {partner_user_id, partner_id}} <-
+           {:ok, token_data} <-
              Phoenix.Token.verify(PhoenixStarterKitWeb.Endpoint, "partner_auth", token, max_age: @auth_token_max_age),
+           {partner_user_id, partner_id, locale} <- normalize_token_data(token_data),
            %{} = partner_user <- Partners.get_partner_user(partner_user_id) do
         partner_user = Partners.set_current_partner(partner_user, partner_id)
         set_sentry_context(partner_user)
@@ -141,6 +144,7 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
         |> assign(:current_partner_user, partner_user)
         |> assign(:current_partner, partner_user.partner)
         |> assign(:auth_token, token)
+        |> assign(:locale, locale)
       else
         _ -> fetch_partner_user_from_session(conn)
       end
@@ -221,8 +225,42 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
       # Keep session-based keys as fallback for first-party contexts
       # where cookies work normally.
       "partner_user_token" => partner_user_token,
-      "current_partner_id" => get_session(conn, "current_partner_id")
+      "current_partner_id" => get_session(conn, "current_partner_id"),
+      "locale" => conn.assigns[:locale]
     }
+  end
+
+  @doc """
+  Plug that resolves the Gettext locale for the current request.
+
+  Priority:
+    1. JWT locale from `:locale` assign (set by fetch_partner_user_from_auth_token)
+    2. Browser locale parsed from the Accept-Language request header
+
+  Assigns `:locale` on the conn so `live_session_data/1` can carry it into
+  the LiveView phx-session, where `mount_current_partner_user/2` re-applies it.
+  """
+  def put_locale_from_browser(conn, _opts) do
+    locale = conn.assigns[:locale] || browser_locale(conn)
+    PlatformGettext.put_locale(locale)
+    assign(conn, :locale, locale)
+  end
+
+  defp browser_locale(conn) do
+    case get_req_header(conn, "accept-language") do
+      [header | _] ->
+        header
+        |> String.split([",", ";"])
+        |> List.first()
+        |> String.trim()
+        |> case do
+          "" -> nil
+          locale -> locale
+        end
+
+      [] ->
+        nil
+    end
   end
 
   @doc """
@@ -277,26 +315,19 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
   end
 
   defp mount_current_partner_user(socket, session) do
+    {partner_user, locale} = resolve_session(session)
+
     socket =
-      Phoenix.Component.assign_new(socket, :current_partner_user, fn ->
-        cond do
-          auth_token = session["auth_token"] ->
-            verify_auth_token(auth_token)
-
-          partner_user_token = session["partner_user_token"] ->
-            Partners.get_partner_user_by_session_token(
-              partner_user_token,
-              session["current_partner_id"]
-            )
-
-          true ->
-            nil
-        end
-      end)
+      socket
+      |> Phoenix.Component.assign_new(:current_partner_user, fn -> partner_user end)
+      |> Phoenix.Component.assign_new(:locale, fn -> locale end)
 
     # Set platform and Sentry context after assign_new so it always runs in the
     # current process — LiveView runs in a separate process from the HTTP conn,
     # so process-dictionary state (Sentry, PlatformGettext) must be re-set here.
+    # JWT locale overrides browser-language detection downstream apps may have applied.
+    PlatformGettext.put_locale(socket.assigns[:locale])
+
     if partner_user = socket.assigns[:current_partner_user] do
       if partner_user.partner do
         PlatformGettext.put_platform(partner_user.partner.platform)
@@ -308,18 +339,45 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
     safe_on_mount(socket)
   end
 
-  defp verify_auth_token(token) do
-    case Phoenix.Token.verify(PhoenixStarterKitWeb.Endpoint, "partner_auth", token, max_age: @auth_token_max_age) do
-      {:ok, {partner_user_id, partner_id}} ->
-        case Partners.get_partner_user(partner_user_id) do
-          nil -> nil
-          partner_user -> Partners.set_current_partner(partner_user, partner_id)
-        end
+  defp resolve_session(session) do
+    cond do
+      auth_token = session["auth_token"] ->
+        verify_auth_token(auth_token)
 
-      _ ->
-        nil
+      partner_user_token = session["partner_user_token"] ->
+        partner_user =
+          Partners.get_partner_user_by_session_token(
+            partner_user_token,
+            session["current_partner_id"]
+          )
+
+        {partner_user, session["locale"]}
+
+      true ->
+        {nil, session["locale"]}
     end
   end
+
+  defp verify_auth_token(token) do
+    case Phoenix.Token.verify(PhoenixStarterKitWeb.Endpoint, "partner_auth", token, max_age: @auth_token_max_age) do
+      {:ok, token_data} ->
+        {partner_user_id, partner_id, locale} = normalize_token_data(token_data)
+
+        partner_user =
+          case Partners.get_partner_user(partner_user_id) do
+            nil -> nil
+            partner_user -> Partners.set_current_partner(partner_user, partner_id)
+          end
+
+        {partner_user, locale}
+
+      _ ->
+        {nil, nil}
+    end
+  end
+
+  defp normalize_token_data({partner_user_id, partner_id, locale}), do: {partner_user_id, partner_id, locale}
+  defp normalize_token_data({partner_user_id, partner_id}), do: {partner_user_id, partner_id, nil}
 
   defp safe_on_mount(socket) do
     # This is only for tests and annoying; getting an error about how the live

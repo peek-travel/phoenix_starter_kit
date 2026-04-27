@@ -72,7 +72,7 @@ defmodule PhoenixStarterKit.MixProject do
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.1"},
       {:dotenvy, "~> 1.0"},
-      {:peek_app_sdk, git: "https://github.com/peek-travel/peek_app_sdk.git"},
+      {:peek_app_sdk, git: "https://github.com/peek-travel/peek_app_sdk.git", branch: "feat/expose-verified-claims-in-conn-assigns"},
       {:excoveralls, "~> 0.16"},
       {:mimic, "~> 2.0", only: :test},
       {:tidewave, "~> 0.4", only: :dev},

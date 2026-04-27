@@ -45,6 +45,25 @@ defmodule PhoenixStarterKitWeb.PlatformGettextTest do
     end
   end
 
+  describe "put_locale/1" do
+    test "sets Gettext locale when given a non-empty string" do
+      PlatformGettext.put_locale("es")
+      assert Gettext.get_locale(PhoenixStarterKitWeb.Gettext) == "es"
+    end
+
+    test "no-ops when locale is nil" do
+      Gettext.put_locale(PhoenixStarterKitWeb.Gettext, "en")
+      PlatformGettext.put_locale(nil)
+      assert Gettext.get_locale(PhoenixStarterKitWeb.Gettext) == "en"
+    end
+
+    test "no-ops when locale is empty string" do
+      Gettext.put_locale(PhoenixStarterKitWeb.Gettext, "en")
+      PlatformGettext.put_locale("")
+      assert Gettext.get_locale(PhoenixStarterKitWeb.Gettext) == "en"
+    end
+  end
+
   describe "t/2 with bindings" do
     test "uses platform from process dictionary with bindings" do
       PlatformGettext.put_platform(:acme)
