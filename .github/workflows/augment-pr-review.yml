@@ -53,6 +53,7 @@ jobs:
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
+          JIRA_BASE_URL="${JIRA_BASE_URL%/}"
           TICKET_IDS=$(echo "$PR_BODY" | grep -oE '[A-Z]+-[0-9]+' | sort -u | head -5)
 
           if [ -z "$TICKET_IDS" ]; then
@@ -177,10 +178,11 @@ jobs:
             if (hasActiveFormal) return;
 
             // Use inline review comments as signal: comments mean the AI flagged specific lines
-            const { data: comments } = await github.rest.pulls.listReviewComments({
+            const comments = await github.paginate(github.rest.pulls.listReviewComments, {
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: pr_number,
+              per_page: 100,
             });
             const headSha = context.payload.pull_request.head.sha;
             const botComments = comments.filter(c =>
@@ -235,6 +237,11 @@ jobs:
 
             // Don't process when the bot itself submitted this review (prevents loops)
             if (context.payload.review.user.login === bot.login) return;
+
+            // Only dismiss when a human takes a real stance — ignore COMMENT-type reviews
+            // (a clarifying question should not unblock a PR that has AI feedback pending)
+            const triggerState = context.payload.review.state.toUpperCase();
+            if (triggerState !== 'APPROVED' && triggerState !== 'CHANGES_REQUESTED') return;
 
             const { data: reviews } = await github.rest.pulls.listReviews({
               owner: context.repo.owner,
