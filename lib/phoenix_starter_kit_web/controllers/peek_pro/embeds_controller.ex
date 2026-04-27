@@ -38,11 +38,13 @@ defmodule PhoenixStarterKitWeb.PeekPro.EmbedsController do
       )
       when is_binary(peek_install_id) do
     partner_user = PhoenixStarterKit.Partners.upsert_for_peek_account_user(current_partner, peek_account_user)
+    locale = locale_from_peek_auth(conn)
 
     auth_token =
       Phoenix.Token.sign(PhoenixStarterKitWeb.Endpoint, "partner_auth", {
         partner_user.id,
-        current_partner.id
+        current_partner.id,
+        locale
       })
 
     redirect(conn, to: ~p"/settings?auth_token=#{auth_token}")
@@ -56,4 +58,10 @@ defmodule PhoenixStarterKitWeb.PeekPro.EmbedsController do
     |> put_layout(false)
     |> render(:expired)
   end
+
+  defp locale_from_peek_auth(%{assigns: %{peek_verified_claims: %{"locale" => locale}}})
+       when is_binary(locale) and locale != "",
+       do: locale
+
+  defp locale_from_peek_auth(_conn), do: nil
 end

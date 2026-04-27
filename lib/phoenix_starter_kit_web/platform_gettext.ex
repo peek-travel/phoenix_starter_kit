@@ -45,6 +45,19 @@ defmodule PhoenixStarterKitWeb.PlatformGettext do
   end
 
   @doc """
+  Sets the Gettext locale for the current process from a JWT-provided locale string.
+  Overrides any locale previously set (e.g. from browser language detection).
+  No-ops when locale is nil or empty — preserving whatever was already set.
+  """
+  @spec put_locale(String.t() | nil) :: :ok
+  def put_locale(locale) when is_binary(locale) and locale != "" do
+    Gettext.put_locale(PhoenixStarterKitWeb.Gettext, locale)
+    :ok
+  end
+
+  def put_locale(_), do: :ok
+
+  @doc """
   Translates a key using the platform stored in process dictionary.
   """
   @spec t(String.t()) :: String.t()

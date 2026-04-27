@@ -16,6 +16,7 @@ defmodule PhoenixStarterKitWeb.Router do
     plug :fetch_current_partner_user
     plug :allow_peek_iframe
     plug PhoenixStarterKitWeb.Plugs.SetCurrentPartner
+    plug :put_locale_from_browser
   end
 
   pipeline :api do

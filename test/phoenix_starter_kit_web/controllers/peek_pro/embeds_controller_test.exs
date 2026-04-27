@@ -102,7 +102,7 @@ defmodule PhoenixStarterKitWeb.PeekPro.EmbedsControllerTest do
       assert redirect_url =~ "/settings?auth_token="
     end
 
-    test "auth token in redirect is a valid Phoenix.Token", %{conn: conn} do
+    test "auth token in redirect is a valid Phoenix.Token containing locale", %{conn: conn} do
       partner = PhoenixStarterKit.PartnersFixtures.partner_fixture()
 
       account_user = %PeekAppSDK.AccountUser{
@@ -127,11 +127,56 @@ defmodule PhoenixStarterKitWeb.PeekPro.EmbedsControllerTest do
       %URI{query: query} = URI.parse(redirect_url)
       %{"auth_token" => token} = URI.decode_query(query)
 
-      assert {:ok, {partner_user_id, partner_id}} =
+      assert {:ok, {partner_user_id, partner_id, locale}} =
                Phoenix.Token.verify(PhoenixStarterKitWeb.Endpoint, "partner_auth", token, max_age: 86_400)
 
       assert is_binary(partner_user_id)
       assert partner_id == partner.id
+      assert is_nil(locale)
     end
+
+    test "auth token in redirect carries locale from peek-auth JWT", %{conn: conn} do
+      partner = PhoenixStarterKit.PartnersFixtures.partner_fixture()
+
+      account_user = %PeekAppSDK.AccountUser{
+        id: "789",
+        name: "Locale User",
+        email: "locale.test@example.com",
+        is_peek_admin: false,
+        primary_role: "partner_admin"
+      }
+
+      locale_token = build_peek_auth_with_locale(partner.app_registry_installation_refid, account_user, "es")
+
+      conn = post(conn, ~p"/peek-pro/settings", %{"peek-auth" => locale_token})
+
+      redirect_url = redirected_to(conn)
+      %URI{query: query} = URI.parse(redirect_url)
+      %{"auth_token" => token} = URI.decode_query(query)
+
+      assert {:ok, {_partner_user_id, _partner_id, "es"}} =
+               Phoenix.Token.verify(PhoenixStarterKitWeb.Endpoint, "partner_auth", token, max_age: 86_400)
+    end
+  end
+
+  defp build_peek_auth_with_locale(install_id, account_user, locale) do
+    config = PeekAppSDK.Config.get_config(nil)
+    signer = Joken.Signer.create("HS256", config.peek_app_secret)
+
+    params = %{
+      "iss" => "app_registry_v2",
+      "sub" => install_id,
+      "exp" => DateTime.utc_now() |> DateTime.add(60) |> DateTime.to_unix(),
+      "locale" => locale,
+      "user" => %{
+        "email" => account_user.email,
+        "id" => account_user.id,
+        "is_admin" => account_user.is_peek_admin,
+        "name" => account_user.name
+      }
+    }
+
+    {:ok, token, _claims} = Joken.generate_and_sign(%{}, params, signer)
+    token
   end
 end

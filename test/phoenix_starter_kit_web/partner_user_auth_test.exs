@@ -20,6 +20,10 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuthTest do
     Phoenix.Token.sign(PhoenixStarterKitWeb.Endpoint, "partner_auth", {partner_user_id, partner_id})
   end
 
+  defp sign_auth_token_with_locale(partner_user_id, partner_id, locale) do
+    Phoenix.Token.sign(PhoenixStarterKitWeb.Endpoint, "partner_auth", {partner_user_id, partner_id, locale})
+  end
+
   describe "log_in_partner_user/3" do
     test "stores the partner_user token in the session", %{conn: conn, partner_user: partner_user} do
       conn = PartnerUserAuth.log_in_partner_user(conn, partner_user)
@@ -135,6 +139,58 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuthTest do
         |> PartnerUserAuth.fetch_partner_user_from_auth_token([])
 
       refute conn.assigns[:current_partner_user]
+    end
+
+    test "assigns locale from a new-format auth_token", %{conn: conn, partner_user: partner_user} do
+      partner = partner_fixture()
+      {:ok, _} = Partners.connect_partner_user(partner, partner_user)
+      token = sign_auth_token_with_locale(partner_user.id, partner.id, "es")
+
+      conn =
+        conn
+        |> Map.put(:params, %{"auth_token" => token})
+        |> PartnerUserAuth.fetch_partner_user_from_auth_token([])
+
+      assert conn.assigns.current_partner_user.id == partner_user.id
+      assert conn.assigns.locale == "es"
+    end
+  end
+
+  describe "put_locale_from_browser/2" do
+    test "uses JWT locale from assigns when present", %{conn: conn} do
+      conn =
+        conn
+        |> assign(:locale, "fr")
+        |> put_req_header("accept-language", "en-US,en;q=0.9")
+        |> PartnerUserAuth.put_locale_from_browser([])
+
+      assert conn.assigns.locale == "fr"
+      assert Gettext.get_locale(PhoenixStarterKitWeb.Gettext) == "fr"
+    end
+
+    test "falls back to Accept-Language header when no JWT locale", %{conn: conn} do
+      conn =
+        conn
+        |> put_req_header("accept-language", "es-MX,es;q=0.9")
+        |> PartnerUserAuth.put_locale_from_browser([])
+
+      assert conn.assigns.locale == "es-MX"
+      assert Gettext.get_locale(PhoenixStarterKitWeb.Gettext) == "es-MX"
+    end
+
+    test "assigns nil locale when no JWT locale and no Accept-Language header", %{conn: conn} do
+      conn = PartnerUserAuth.put_locale_from_browser(conn, [])
+
+      assert is_nil(conn.assigns.locale)
+    end
+
+    test "assigns nil locale when Accept-Language header is blank", %{conn: conn} do
+      conn =
+        conn
+        |> put_req_header("accept-language", "")
+        |> PartnerUserAuth.put_locale_from_browser([])
+
+      assert is_nil(conn.assigns.locale)
     end
   end
 
