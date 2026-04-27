@@ -16,7 +16,7 @@ jobs:
     env:
       HAS_AUGMENT: ${{ secrets.AUGMENT_SESSION_AUTH != '' }}
       HAS_PAT: ${{ secrets.PAT_GITHUB_TOKEN != '' }}
-      HAS_JIRA: ${{ secrets.JIRA_API_TOKEN != '' }}
+      HAS_JIRA: ${{ secrets.JIRA_API_TOKEN != '' && secrets.JIRA_EMAIL != '' && secrets.JIRA_BASE_URL != '' }}
     steps:
       - name: Dismiss outdated bot reviews
         if: env.HAS_PAT == 'true' && (github.event.action == 'synchronize' || github.event.action == 'reopened')
@@ -75,10 +75,11 @@ jobs:
             fi
           done <<< "$TICKET_IDS"
 
+          DELIMITER=$(openssl rand -hex 16)
           {
-            echo "jira_context<<JIRA_EOF"
+            echo "jira_context<<$DELIMITER"
             printf '%s' "$LINES"
-            echo "JIRA_EOF"
+            echo "$DELIMITER"
           } >> "$GITHUB_OUTPUT"
 
       - name: AI PR Review with Auggie
