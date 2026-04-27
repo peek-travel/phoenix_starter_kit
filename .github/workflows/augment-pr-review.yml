@@ -3,29 +3,99 @@ name: Augment PR Review
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  pull_request_review:
+    types: [submitted]
 
 jobs:
   review:
     runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
     permissions:
       contents: read
       pull-requests: write
     env:
-      HAS_SECRET: ${{ secrets.AUGMENT_SESSION_AUTH != '' }}
+      HAS_AUGMENT: ${{ secrets.AUGMENT_SESSION_AUTH != '' }}
+      HAS_PAT: ${{ secrets.PAT_GITHUB_TOKEN != '' }}
+      HAS_JIRA: ${{ secrets.JIRA_API_TOKEN != '' }}
     steps:
+      - name: Dismiss outdated bot reviews
+        if: env.HAS_PAT == 'true' && (github.event.action == 'synchronize' || github.event.action == 'reopened')
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ secrets.PAT_GITHUB_TOKEN }}
+          script: |
+            const { data: bot } = await github.rest.users.getAuthenticated();
+            const { data: reviews } = await github.rest.pulls.listReviews({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+            });
+            const outdated = reviews.filter(r =>
+              r.user.login === bot.login &&
+              (r.state === 'CHANGES_REQUESTED' || r.state === 'APPROVED')
+            );
+            for (const review of outdated) {
+              await github.rest.pulls.dismissReview({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.payload.pull_request.number,
+                review_id: review.id,
+                message: 'Outdated — superseded by new commit',
+              });
+            }
+
+      - name: Fetch Jira ticket context
+        id: jira
+        if: env.HAS_JIRA == 'true'
+        env:
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          TICKET_IDS=$(echo "$PR_BODY" | grep -oE '[A-Z]+-[0-9]+' | sort -u | head -5)
+
+          if [ -z "$TICKET_IDS" ]; then
+            echo "jira_context=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          LINES="## Jira Ticket Context"$'\n'
+          while IFS= read -r TICKET; do
+            RESPONSE=$(curl -sf \
+              -u "$JIRA_EMAIL:$JIRA_API_TOKEN" \
+              -H "Accept: application/json" \
+              "$JIRA_BASE_URL/rest/api/3/issue/$TICKET?fields=summary,status,priority" || echo '{}')
+            SUMMARY=$(echo "$RESPONSE" | jq -r '.fields.summary // empty')
+            STATUS=$(echo "$RESPONSE"  | jq -r '.fields.status.name // empty')
+            PRIORITY=$(echo "$RESPONSE" | jq -r '.fields.priority.name // empty')
+            if [ -n "$SUMMARY" ]; then
+              LINES+="**$TICKET**: $SUMMARY (Status: $STATUS, Priority: $PRIORITY)"$'\n'
+            fi
+          done <<< "$TICKET_IDS"
+
+          {
+            echo "jira_context<<JIRA_EOF"
+            printf '%s' "$LINES"
+            echo "JIRA_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: AI PR Review with Auggie
         id: review
-        if: env.HAS_SECRET == 'true'
+        if: env.HAS_AUGMENT == 'true'
         # Using @v0 intentionally to receive latest features and improvements
         uses: augmentcode/review-pr@v0
         with:
           # Requires AUGMENT_SESSION_AUTH secret configured in repository settings
           # See: https://docs.augmentcode.com/setup/pr-review-action
           augment_session_auth: ${{ secrets.AUGMENT_SESSION_AUTH }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.PAT_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           pull_number: ${{ github.event.pull_request.number }}
           repo_name: ${{ github.repository }}
+          model: claude-sonnet-4-6
           custom_guidelines: |
+            ${{ steps.jira.outputs.jira_context }}
+
             ## Phoenix Starter Kit Review Guidelines
 
             ### Elixir/Phoenix Standards
@@ -84,6 +154,53 @@ jobs:
             - Focus on issues that matter, skip nitpicks on formatting
         continue-on-error: true
 
+      - name: Submit formal review decision
+        if: env.HAS_PAT == 'true' && steps.review.outcome == 'success'
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ secrets.PAT_GITHUB_TOKEN }}
+          script: |
+            const pr_number = context.payload.pull_request.number;
+            const { data: bot } = await github.rest.users.getAuthenticated();
+
+            // Skip if bot already has an active formal review for this commit
+            const { data: reviews } = await github.rest.pulls.listReviews({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr_number,
+            });
+            const hasActiveFormal = reviews.some(r =>
+              r.user.login === bot.login &&
+              (r.state === 'CHANGES_REQUESTED' || r.state === 'APPROVED') &&
+              r.commit_id === context.payload.pull_request.head.sha
+            );
+            if (hasActiveFormal) return;
+
+            // Use inline review comments as signal: comments mean the AI flagged specific lines
+            const { data: comments } = await github.rest.pulls.listReviewComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr_number,
+            });
+            const headSha = context.payload.pull_request.head.sha;
+            const botComments = comments.filter(c =>
+              c.user.login === bot.login &&
+              c.original_commit_id === headSha
+            );
+
+            const hasIssues = botComments.length > 0;
+            await github.rest.pulls.createReview({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr_number,
+              commit_id: headSha,
+              event: hasIssues ? 'REQUEST_CHANGES' : 'APPROVE',
+              body: hasIssues
+                ? `AI review found ${botComments.length} item(s) to address — see inline comments above.`
+                : 'AI review found no blocking issues.',
+            });
+        continue-on-error: true
+
       - name: Fallback comment on failure
         if: steps.review.outcome == 'failure'
         uses: actions/github-script@v9
@@ -99,3 +216,41 @@ jobs:
               issue_number: context.issue.number,
               body: `⚠️ **Augment AI review failed**\n\nThe automatic PR review encountered an error. Please request a manual review.\n\n[View workflow logs](${serverUrl}/${repository}/actions/runs/${runId})`
             })
+
+  dismiss-on-review:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request_review'
+    permissions:
+      pull-requests: write
+    env:
+      HAS_PAT: ${{ secrets.PAT_GITHUB_TOKEN != '' }}
+    steps:
+      - name: Dismiss outdated bot reviews on human review
+        if: env.HAS_PAT == 'true'
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ secrets.PAT_GITHUB_TOKEN }}
+          script: |
+            const { data: bot } = await github.rest.users.getAuthenticated();
+
+            // Don't process when the bot itself submitted this review (prevents loops)
+            if (context.payload.review.user.login === bot.login) return;
+
+            const { data: reviews } = await github.rest.pulls.listReviews({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+            });
+            const outdated = reviews.filter(r =>
+              r.user.login === bot.login &&
+              (r.state === 'CHANGES_REQUESTED' || r.state === 'APPROVED')
+            );
+            for (const review of outdated) {
+              await github.rest.pulls.dismissReview({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.payload.pull_request.number,
+                review_id: review.id,
+                message: 'Outdated — superseded by new review',
+              });
+            }
