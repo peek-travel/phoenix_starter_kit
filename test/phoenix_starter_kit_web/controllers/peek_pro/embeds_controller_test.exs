@@ -167,12 +167,12 @@ defmodule PhoenixStarterKitWeb.PeekPro.EmbedsControllerTest do
       "iss" => "app_registry_v2",
       "sub" => install_id,
       "exp" => DateTime.utc_now() |> DateTime.add(60) |> DateTime.to_unix(),
-      "locale" => locale,
       "user" => %{
         "email" => account_user.email,
         "id" => account_user.id,
         "is_admin" => account_user.is_peek_admin,
-        "name" => account_user.name
+        "name" => account_user.name,
+        "locale" => locale
       }
     }
 
