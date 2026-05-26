@@ -10,6 +10,7 @@ Thank you for your interest in contributing to the Phoenix Starter Kit for Peek 
 - Erlang/OTP 25 or higher
 - PostgreSQL 12 or higher
 - Node.js 18 or higher (for asset compilation)
+- [Lefthook](https://lefthook.dev) (`brew install lefthook`) — manages the pre-push hook
 
 ### Setting Up Your Development Environment
 
@@ -31,7 +32,13 @@ Thank you for your interest in contributing to the Phoenix Starter Kit for Peek 
    mix ecto.setup
    ```
 
-5. Run the test suite to ensure everything is working:
+5. Install git hooks:
+   ```bash
+   brew install lefthook
+   lefthook install
+   ```
+
+6. Run the test suite to ensure everything is working:
    ```bash
    make
    ```

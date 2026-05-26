@@ -197,7 +197,17 @@ if [ -f ".github/dependabot.yml" ]; then
   print_success "Removed .github/dependabot.yml"
 fi
 
-# Step 7: Run checks
+# Step 7: Set up git hooks with lefthook
+echo ""
+print_status "Setting up git hooks..."
+if ! command -v lefthook &>/dev/null; then
+  print_status "Installing lefthook via Homebrew..."
+  brew install lefthook
+fi
+lefthook install
+print_success "Git hooks installed (pre-push: make all)!"
+
+# Step 8: Run checks
 echo ""
 print_status "Running checks to verify everything works..."
 if bin/check; then

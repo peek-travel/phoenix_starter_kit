@@ -249,11 +249,26 @@ To customize the starter kit for your specific Peek Pro app:
 
 The `bin/` directory contains several useful scripts:
 
-- **`bin/setup`**: Interactive setup wizard that renames the project, configures deployment platform, and creates version tracking file.
+- **`bin/setup`**: Interactive setup wizard that renames the project, configures deployment platform, installs lefthook git hooks, and creates version tracking file.
 - **`bin/dev`**: Sets up and runs a Cloudflare tunnel for development. Automatically creates `{app-name}-dev.peeklabs.com` tunnel.
 - **`bin/server`**: Starts the Phoenix server with IEx for development.
 - **`make`**: Runs tests and code quality checks (format, lint, coverage).
 - **`bin/sync`**: Syncs your app configuration with the Peek Pro registry.
+
+## Git Hooks
+
+This project uses [Lefthook](https://lefthook.dev) to manage git hooks. The pre-push hook runs `make all` (format, lint, and full test coverage) before every push to catch issues before they hit CI.
+
+### Setup
+
+`bin/setup` handles this automatically. If you need to install manually:
+
+```bash
+brew install lefthook
+lefthook install
+```
+
+The hook configuration lives in `lefthook.yml` at the project root.
 
 ## GitHub Actions
 
