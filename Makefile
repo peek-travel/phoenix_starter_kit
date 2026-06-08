@@ -1,4 +1,4 @@
-.PHONY: all help setup deps fmt fmt-check lint test coverage ci
+.PHONY: all help setup deps fmt fmt-check lint test coverage compile ci
 
 MIX ?= mix
 
@@ -30,9 +30,13 @@ test:
 coverage:
 	$(MIX) coveralls.lcov
 
+compile:
+	env MIX_ENV=test $(MIX) compile --warnings-as-errors
+
 ci:
 	$(MAKE) deps
 	env MIX_ENV=test $(MIX) ecto.reset
+	$(MAKE) compile
 	$(MAKE) fmt-check
 	$(MAKE) lint
 	$(MAKE) coverage
