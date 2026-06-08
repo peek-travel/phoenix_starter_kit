@@ -14,15 +14,16 @@ fi
 # Create bin/ directory if it doesn't exist
 mkdir -p bin/
 
-# Copy Fly.io scripts to bin/
-echo "📋 Copying Fly.io scripts to bin/..."
+# Copy Fly.io Dockerfile and scripts
+echo "📋 Copying Fly.io files..."
+cp fly-io/Dockerfile Dockerfile
 cp fly-io/dev bin/dev
 cp fly-io/proxy_prod bin/proxy_prod
 cp fly-io/shell_prod bin/shell_prod
 chmod +x bin/dev
 chmod +x bin/proxy_prod
 chmod +x bin/shell_prod
-echo "   ✅ Scripts copied"
+echo "   ✅ Files copied"
 
 # Clean up fly-io directory (no longer needed)
 echo "🧹 Cleaning up fly-io directory..."
