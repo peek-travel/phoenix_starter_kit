@@ -16,7 +16,6 @@ defmodule PhoenixStarterKit.DataCase do
 
   use ExUnit.CaseTemplate
 
-  require Logger
   import Mimic
 
   using do

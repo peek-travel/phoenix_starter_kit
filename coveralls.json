@@ -3,6 +3,7 @@
     "config/*",
     "test/*",
     "lib/phoenix_starter_kit/application.ex",
+    "lib/phoenix_starter_kit/schema.ex",
     "lib/phoenix_starter_kit/sentry_finch_client.ex",
     "lib/phoenix_starter_kit_web/telemetry.ex",
     "lib/phoenix_starter_kit_web/release.ex",

@@ -7,8 +7,8 @@ on:
 
 env:
   MIX_ENV: test
-  OTP_VERSION_SPEC: '28.3.1'
-  ELIXIR_VERSION_SPEC: '1.19.5'
+  OTP_VERSION_SPEC: '29.0.1'
+  ELIXIR_VERSION_SPEC: '1.20.0'
 
   # Change either of these if you want to bust the cache:
   DEPS_CACHE_PREFIX: v4-
@@ -112,7 +112,7 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     services:
       postgres:
-        image: postgres:12-alpine
+        image: postgres:17-alpine
         ports:
           - 5432:5432
         env:
