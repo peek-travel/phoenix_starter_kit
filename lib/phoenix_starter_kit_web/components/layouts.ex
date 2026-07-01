@@ -31,7 +31,7 @@ defmodule PhoenixStarterKitWeb.Layouts do
 
   def app(assigns) do
     ~H"""
-    <main>
+    <main class="p-4">
       <div>
         {render_slot(@inner_block)}
       </div>
