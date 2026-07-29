@@ -270,23 +270,6 @@ lefthook install
 
 The hook configuration lives in `lefthook.yml` at the project root.
 
-## GitHub Actions
-
-### Augment PR Review
-
-The repository includes an automated PR review workflow using Augment AI (`.github/workflows/augment-pr-review.yml`).
-
-**Setup:**
-
-1. Obtain an Augment session auth token from [Augment Code](https://www.augmentcode.com)
-2. Add it as a repository secret:
-   - Go to **Settings** → **Secrets and variables** → **Actions**
-   - Click **New repository secret**
-   - Name: `AUGMENT_SESSION_AUTH`
-   - Value: Your Augment session auth token
-
-The workflow will automatically review PRs when they are opened, synchronized, or reopened.
-
 ## Deployment
 
 The starter kit is ready for deployment to production environments. It includes:
