@@ -67,11 +67,11 @@ defmodule PhoenixStarterKit.DataCase do
     # Copy and mock PeekAppSDK.Metrics for metrics tracking
     copy(PeekAppSDK.Metrics)
 
-    stub(PeekAppSDK.Metrics, :track_install, fn _external_refid, _name, _is_test ->
+    stub(PeekAppSDK.Metrics, :track_install, fn _partner ->
       {:ok, %{}}
     end)
 
-    stub(PeekAppSDK.Metrics, :track_uninstall, fn _external_refid, _name, _is_test ->
+    stub(PeekAppSDK.Metrics, :track_uninstall, fn _partner ->
       {:ok, %{}}
     end)
 

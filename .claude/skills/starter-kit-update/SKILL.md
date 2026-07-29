@@ -1,7 +1,6 @@
 ---
 name: starter-kit-update
 description: Backport latest commits from phoenix_starter_kit into this project. Use when you need to sync upstream starter kit changes.
-disable-model-invocation: true
 ---
 
 # Starter Kit Update
@@ -73,6 +72,7 @@ You are tasked with backporting the latest changes from the `phoenix_starter_kit
       - The starter kit module namespace is `PhoenixStarterKit`/`PhoenixStarterKitWeb` and app name is `phoenix_starter_kit` — map these to the detected project equivalents
       - Some files may not exist in this project or may have diverged significantly — use judgment
       - Skip changes that are clearly starter-kit-specific and don't apply
+      - **Don't apply generated or project-shaped files as a literal patch.** Files like `mix.lock` (a different dependency tree per project) or a `Dockerfile` (which may live at a different path or have a different structure, e.g. Alpine vs Debian, different build stages, AWS Fargate vs Fly.io) can't be diffed verbatim. For these, re-derive the equivalent change in this project's actual file (e.g. run `mix deps.update` yourself instead of patching `mix.lock`; find and bump this project's own version-pin lines instead of copying the Dockerfile diff). The `[DOWNSTREAM INSTRUCTIONS]` block (if present) should tell you which files fall into this category — treat its absence as a signal that a direct diff is safe to apply.
 
    e. **Update `.phoenix_starter_kit_version`** with this commit's SHA.
 
@@ -108,6 +108,9 @@ You are tasked with backporting the latest changes from the `phoenix_starter_kit
    git push -u origin HEAD
    ```
 
+9. **Improve this skill.**
+   If this run surfaced something this file didn't already cover — a new file-mapping pattern, a gotcha in how a starter kit change needed adapting, a `[DOWNSTREAM INSTRUCTIONS]` block that was ambiguous or missing something you had to guess at, a step that turned out to be wrong or incomplete — update this `SKILL.md` with that knowledge before finishing, so the next run starts smarter. Keep additions concrete and short (a bullet under "Important Notes", or a tweak to the relevant step); don't pad the file with narration. If the fix is something upstream `phoenix_starter_kit` itself should know (e.g. a commit that was missing a `[DOWNSTREAM INSTRUCTIONS]` block it needed), mention that in your report to the user rather than trying to change the upstream repo yourself.
+
 ## Important Notes
 
 - Always work commit-by-commit to maintain a clean, reviewable history.
@@ -116,3 +119,5 @@ You are tasked with backporting the latest changes from the `phoenix_starter_kit
 - If the backport introduces new dependencies, run `mix deps.get` after updating `mix.exs`.
 - If the backport includes new migrations, note them in the review but DO NOT run them automatically.
 - Downstream instructions in commit messages are authoritative — apply them even if the diff itself doesn't touch those files.
+- Never apply `mix.lock` or Dockerfile diffs verbatim — re-derive the equivalent change for this project's own files (see step 5d).
+- This skill file itself lives in the starter kit template, so it ships to every project created from it — keep it generically useful, not specific to any one downstream project's quirks.
