@@ -210,7 +210,7 @@ print_success "Git hooks installed (pre-push: make all)!"
 # Step 8: Run checks
 echo ""
 print_status "Running checks to verify everything works..."
-if bin/check; then
+if make; then
   print_success "All checks passed!"
 else
   print_error "Checks failed. Please review the errors above."
