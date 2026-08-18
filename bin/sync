@@ -220,7 +220,7 @@ send_request "false"
 ERROR_DETAIL=""
 if [[ "$HTTP_STATUS" == "403" ]]; then
   # Some error responses are not JSON:API-style arrays; guard jq so it can't blow up the script
-  ERROR_DETAIL=$(echo "$RESPONSE_BODY" | jq -r '.errors[0].detail // empty' 2>/dev/null || echo "")
+  ERROR_DETAIL=$(echo "$RESPONSE_BODY" | jq -r '.errors.detail // .errors[0].detail // empty' 2>/dev/null || echo "")
 fi
 
 if [[ "$HTTP_STATUS" == "403" && "$ERROR_DETAIL" == "Auto-publish is not allowed in production without allow-prod=true" ]]; then
