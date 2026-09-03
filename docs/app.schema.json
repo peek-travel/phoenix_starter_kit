@@ -39,17 +39,28 @@
             "app_version": {
               "type": "object",
               "required": [
-                "extendables",
+                "registry_extendables",
+                "platform_extendables",
                 "display_version",
                 "description",
                 "status"
               ],
               "properties": {
-                "extendables": {
+                "registry_extendables": {
                   "type": "array",
-                  "description": "List of configured extendables for this app version",
+                  "description": "List of registry-level (platform-agnostic) extendables for this app version",
                   "items": {
                     "$ref": "#/$defs/extendable"
+                  }
+                },
+                "platform_extendables": {
+                  "type": "object",
+                  "description": "Platform-scoped extendables for this app version, keyed by platform name (e.g. 'peek')",
+                  "additionalProperties": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/extendable"
+                    }
                   }
                 },
                 "app_url": {
