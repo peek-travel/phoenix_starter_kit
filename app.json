@@ -10,7 +10,7 @@
         "display_version": "0.0.1",
         "status": "published",
         "categories": [],
-        "extendables": [
+        "registry_extendables": [
           {
             "slug": "app_registry_settings_url@v1",
             "configuration": {
@@ -22,20 +22,24 @@
             "configuration": {
               "url": "/registry/api/on-installation-status-change"
             }
-          },
-          {
-            "slug": "broadcast_to_url@v1",
-            "configuration": {
-              "url": "/peek-pro/api/on-booking-change",
-              "events": [
-                "booking_created",
-                "booking_updated"
-              ],
-              "output_fields_gql_query": "{ id }",
-              "output_format": "gql"
-            }
           }
-        ]
+        ],
+        "platform_extendables": {
+          "peek": [
+            {
+              "slug": "broadcast_to_url@v1",
+              "configuration": {
+                "url": "/peek-pro/api/on-booking-change",
+                "events": [
+                  "booking_created",
+                  "booking_updated"
+                ],
+                "output_fields_gql_query": "{ id }",
+                "output_format": "gql"
+              }
+            }
+          ]
+        }
       },
       "name": "Phoenix Starter Kit",
       "id": "phoenix-starter-kit"

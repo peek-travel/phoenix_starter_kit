@@ -3,7 +3,7 @@
   "data": {
     "app": {
       "app_version": {
-        "extendables": [
+        "registry_extendables": [
           {
             "configuration": {
               "url": "/registry/api/on-installation-status-change"
@@ -16,21 +16,25 @@
               "url": "/peek-pro/settings"
             },
             "slug": "app_registry_settings_url@v1"
-          },
-          {
-            "configuration": {
-              "output_format": "gql",
-              "output_fields_gql_query": "{ id }",
-              "url": "/peek-pro/api/on-booking-change",
-              "events": [
-                "booking_created",
-                "booking_updated"
-              ],
-              "timeout": 60000
-            },
-            "slug": "broadcast_to_url@v1"
           }
         ],
+        "platform_extendables": {
+          "peek": [
+            {
+              "configuration": {
+                "output_format": "gql",
+                "output_fields_gql_query": "{ id }",
+                "url": "/peek-pro/api/on-booking-change",
+                "events": [
+                  "booking_created",
+                  "booking_updated"
+                ],
+                "timeout": 60000
+              },
+              "slug": "broadcast_to_url@v1"
+            }
+          ]
+        },
         "screenshots": [],
         "privacy_url": null,
         "icon_url": "/images/logo.png",
