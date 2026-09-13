@@ -1,0 +1,166 @@
+name: Starter Kit Update
+
+# This file lives in phoenix_starter_kit and gets backported into every child
+# repo the normal way (the starter-kit-update skill copies new/changed files
+# downstream, same as any other commit). No manual copy step, no separate
+# reusable-workflow file to keep in sync — one file, one name, everywhere.
+#
+# It no-ops in phoenix_starter_kit itself (see the job-level `if:` below),
+# since the starter kit doesn't backport into itself. In every child repo it
+# runs for real.
+#
+# One-time setup per child repo (or once at the GitHub org level, so every
+# repo inherits them):
+#   - Secret APP_UPDATES_CLAUDE_API_KEY  (Anthropic API key)
+#   - Secret APP_UPDATES_GH_TOKEN        (bot PAT or GitHub App token, repo +
+#                                          workflow scope — REQUIRED for CI to
+#                                          trigger on the bot's push; without
+#                                          it the PR stays draft forever)
+#   - Secret SLACK_WEBHOOK_URL           (optional — skips the Slack step if unset)
+
+on:
+  schedule:
+    - cron: "0 13 * * 1,4" # Monday and Thursday, 13:00 UTC — adjust as needed
+  workflow_dispatch:
+
+jobs:
+  update:
+    name: Backport phoenix_starter_kit
+    if: github.repository != 'peek-travel/phoenix_starter_kit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ secrets.APP_UPDATES_GH_TOKEN || secrets.GITHUB_TOKEN }}
+      ANTHROPIC_API_KEY: ${{ secrets.APP_UPDATES_CLAUDE_API_KEY }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      BASE_BRANCH: main
+      MAX_FIX_ATTEMPTS: 2
+      CLAUDE_MODEL_ARGS: "" # e.g. "--model claude-sonnet-5"
+    steps:
+      - name: Warn if no bot token is set
+        if: ${{ secrets.APP_UPDATES_GH_TOKEN == '' }}
+        run: |
+          echo "::warning::APP_UPDATES_GH_TOKEN is not set for this repo. Falling back to GITHUB_TOKEN — the branch push below will NOT trigger this repo's own CI workflow, so 'wait for checks' will find no checks and the PR will stay in draft forever. Add an APP_UPDATES_GH_TOKEN secret (bot PAT or GitHub App token, repo + workflow scope) to fix this."
+
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.APP_UPDATES_GH_TOKEN || secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Configure git identity
+        run: |
+          git config user.name "app-updates-bot"
+          git config user.email "app-updates-bot@users.noreply.github.com"
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Create branch
+        id: branch
+        run: |
+          BRANCH="chore/starter-kit-update-$(date +%Y%m%d)-${{ github.run_id }}"
+          git checkout -b "$BRANCH"
+          echo "name=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Run starter-kit-update skill
+        run: |
+          claude -p "Run the starter-kit-update skill (.claude/skills/starter-kit-update/SKILL.md) to backport the latest phoenix_starter_kit commits into this project.
+
+          Overrides for this automated run:
+          - Work on the branch that is already checked out (${{ steps.branch.outputs.name }}). Do not create a new branch.
+          - Skip the step that runs 'make' locally. This runner has no Elixir/Postgres toolchain — this repo's own CI workflow will run the full test suite against the pushed branch instead, and that result is what gates this PR.
+          - Do not push the branch and do not open a pull request yourself. The automation does both of those after you finish.
+          - If there are no new commits to backport, make no changes and clearly say so in your final message." \
+            --permission-mode bypassPermissions \
+            $CLAUDE_MODEL_ARGS
+
+      - name: Push branch and open draft PR
+        id: pr
+        run: |
+          if [ -z "$(git log "${BASE_BRANCH}"..HEAD --oneline)" ]; then
+            echo "had_changes=false" >> "$GITHUB_OUTPUT"
+            echo "No new starter kit commits to backport. Nothing to push."
+            exit 0
+          fi
+
+          git push -u origin "${{ steps.branch.outputs.name }}"
+
+          PR_URL=$(gh pr create \
+            --draft \
+            --base "$BASE_BRANCH" \
+            --title "chore: backport phoenix_starter_kit updates" \
+            --body "Automated backport of the latest phoenix_starter_kit commits, produced by the \`starter-kit-update\` skill running headlessly in this workflow.
+
+          This PR stays in draft while CI runs. It is marked ready for review automatically once checks pass, or gets a follow-up commit if Claude can fix a failure.")
+
+          echo "had_changes=true" >> "$GITHUB_OUTPUT"
+          echo "url=$PR_URL" >> "$GITHUB_OUTPUT"
+          echo "number=$(gh pr view "$PR_URL" --json number --jq .number)" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for checks, retry fixes on failure
+        id: checks
+        if: steps.pr.outputs.had_changes == 'true'
+        run: |
+          PR="${{ steps.pr.outputs.number }}"
+          BRANCH="${{ steps.branch.outputs.name }}"
+          ATTEMPT=0
+          FINAL_STATUS="unknown"
+
+          # Give GitHub a moment to register check runs from the push before watching them.
+          for i in $(seq 1 12); do
+            COUNT=$(gh pr checks "$PR" --json name --jq 'length' 2>/dev/null || echo 0)
+            [ "$COUNT" -gt 0 ] && break
+            sleep 10
+          done
+
+          while true; do
+            if gh pr checks "$PR" --watch --interval 30; then
+              FINAL_STATUS="passed"
+              break
+            fi
+
+            if [ "$ATTEMPT" -ge "$MAX_FIX_ATTEMPTS" ]; then
+              FINAL_STATUS="failed"
+              break
+            fi
+            ATTEMPT=$((ATTEMPT + 1))
+
+            echo "Checks failed. Fix attempt $ATTEMPT of $MAX_FIX_ATTEMPTS..."
+            FAILED_LOGS=$(gh run list --branch "$BRANCH" --json databaseId,conclusion --jq '.[] | select(.conclusion=="failure") | .databaseId' \
+              | xargs -r -I{} gh run view {} --log-failed | tail -c 20000)
+
+            claude -p "PR #$PR (branch $BRANCH) has failing CI checks. Failing logs:
+
+          $FAILED_LOGS
+
+          Diagnose and fix the issues on this branch. Commit the fix. Do not push — the workflow pushes after you finish." \
+              --permission-mode bypassPermissions \
+              $CLAUDE_MODEL_ARGS
+
+            git push
+          done
+
+          echo "status=$FINAL_STATUS" >> "$GITHUB_OUTPUT"
+
+      - name: Mark PR ready for review
+        if: steps.pr.outputs.had_changes == 'true' && steps.checks.outputs.status == 'passed'
+        run: gh pr ready "${{ steps.pr.outputs.number }}"
+
+      - name: Slack notify - success
+        if: steps.pr.outputs.had_changes == 'true' && steps.checks.outputs.status == 'passed' && env.SLACK_WEBHOOK_URL != ''
+        run: |
+          curl -sf -X POST -H 'Content-type: application/json' \
+            --data "$(jq -n --arg repo "${{ github.repository }}" --arg url "${{ steps.pr.outputs.url }}" \
+              '{text: ":white_check_mark: Starter kit update ready for review in \($repo): \($url)"}')" \
+            "$SLACK_WEBHOOK_URL"
+
+      - name: Slack notify - failure
+        if: steps.pr.outputs.had_changes == 'true' && steps.checks.outputs.status == 'failed' && env.SLACK_WEBHOOK_URL != ''
+        run: |
+          curl -sf -X POST -H 'Content-type: application/json' \
+            --data "$(jq -n --arg repo "${{ github.repository }}" --arg url "${{ steps.pr.outputs.url }}" \
+              '{text: ":x: Starter kit update in \($repo) needs a human — CI is still failing after automated fix attempts: \($url)"}')" \
+            "$SLACK_WEBHOOK_URL"
