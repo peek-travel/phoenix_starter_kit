@@ -56,6 +56,11 @@ jobs:
     steps:
       - name: Validate and configure Claude auth
         run: |
+          # Trim stray leading/trailing whitespace or newlines — an easy paste
+          # mistake when setting the secret — so it doesn't break the prefix
+          # match below.
+          CLAUDE_AUTH_VALUE="$(printf '%s' "$CLAUDE_AUTH_VALUE" | tr -d '[:space:]')"
+
           if [ -z "$CLAUDE_AUTH_VALUE" ]; then
             echo "::error::APP_UPDATES_CLAUDE_API_KEY is not set. This workflow can't run Claude Code without it — set it to either an Anthropic Console API key (sk-ant-api...) or a Pro/Max OAuth token from 'claude setup-token' (sk-ant-oat...), then re-run."
             exit 1
