@@ -32,12 +32,15 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      actions: read
+      checks: read
     env:
       GH_TOKEN: ${{ secrets.APP_UPDATES_GH_TOKEN || secrets.GITHUB_TOKEN }}
       ANTHROPIC_API_KEY: ${{ secrets.APP_UPDATES_CLAUDE_API_KEY }}
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
       BASE_BRANCH: main
       MAX_FIX_ATTEMPTS: 2
+      CLAUDE_ALLOWED_TOOLS: "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(gh:*)"
       CLAUDE_MODEL_ARGS: "" # e.g. "--model claude-sonnet-5"
     steps:
       - name: Warn if no bot token is set
@@ -55,6 +58,12 @@ jobs:
           git config user.name "app-updates-bot"
           git config user.email "app-updates-bot@users.noreply.github.com"
 
+      - name: Cache npm downloads
+        uses: actions/cache@v6
+        with:
+          path: ~/.npm
+          key: npm-cache-${{ runner.os }}-claude-code
+
       - name: Install Claude Code CLI
         run: npm install -g @anthropic-ai/claude-code
 
@@ -70,11 +79,13 @@ jobs:
           claude -p "Run the starter-kit-update skill (.claude/skills/starter-kit-update/SKILL.md) to backport the latest phoenix_starter_kit commits into this project.
 
           Overrides for this automated run:
-          - Work on the branch that is already checked out (${{ steps.branch.outputs.name }}). Do not create a new branch.
+          - Skip step 1 of the skill (do not run 'git checkout -b'). A branch named ${{ steps.branch.outputs.name }} is already created and checked out — stay on it.
           - Skip the step that runs 'make' locally. This runner has no Elixir/Postgres toolchain — this repo's own CI workflow will run the full test suite against the pushed branch instead, and that result is what gates this PR.
           - Do not push the branch and do not open a pull request yourself. The automation does both of those after you finish.
+          - This run is unattended — no human is watching to answer questions. If you would normally stop and ask the user about an ambiguous change, do not abort: skip only that specific change, leave a clear TODO/FIXME comment at the spot identifying exactly what needs a human decision, mention it in your final summary, and continue with everything else.
           - If there are no new commits to backport, make no changes and clearly say so in your final message." \
             --permission-mode bypassPermissions \
+            --allowedTools "$CLAUDE_ALLOWED_TOOLS" \
             $CLAUDE_MODEL_ARGS
 
       - name: Push branch and open draft PR
@@ -86,7 +97,10 @@ jobs:
             exit 0
           fi
 
-          git push -u origin "${{ steps.branch.outputs.name }}"
+          # Push HEAD to the intended remote branch name regardless of what's
+          # locally checked out — if Claude ever creates a stray local branch
+          # despite the override above, this still lands on the right ref.
+          git push -u origin HEAD:"${{ steps.branch.outputs.name }}"
 
           PR_URL=$(gh pr create \
             --draft \
@@ -104,20 +118,32 @@ jobs:
         id: checks
         if: steps.pr.outputs.had_changes == 'true'
         run: |
+          # Disabled on purpose: this loop must always reach the final
+          # `echo status=...` line, even if a transient `gh`/`git` call
+          # fails partway through. Under the default `set -e`, any bare
+          # failing command here would abort the step silently and skip
+          # both Slack notifications below.
+          set +e
+
           PR="${{ steps.pr.outputs.number }}"
           BRANCH="${{ steps.branch.outputs.name }}"
           ATTEMPT=0
           FINAL_STATUS="unknown"
 
+          wait_for_checks_to_register() {
+            for i in $(seq 1 12); do
+              COUNT=$(gh pr checks "$PR" --json name --jq 'length' 2>/dev/null || echo 0)
+              [ "$COUNT" -gt 0 ] && break
+              sleep 10
+            done
+          }
+
           # Give GitHub a moment to register check runs from the push before watching them.
-          for i in $(seq 1 12); do
-            COUNT=$(gh pr checks "$PR" --json name --jq 'length' 2>/dev/null || echo 0)
-            [ "$COUNT" -gt 0 ] && break
-            sleep 10
-          done
+          wait_for_checks_to_register
 
           while true; do
-            if gh pr checks "$PR" --watch --interval 30; then
+            gh pr checks "$PR" --watch --interval 30
+            if [ "$?" -eq 0 ]; then
               FINAL_STATUS="passed"
               break
             fi
@@ -129,18 +155,29 @@ jobs:
             ATTEMPT=$((ATTEMPT + 1))
 
             echo "Checks failed. Fix attempt $ATTEMPT of $MAX_FIX_ATTEMPTS..."
-            FAILED_LOGS=$(gh run list --branch "$BRANCH" --json databaseId,conclusion --jq '.[] | select(.conclusion=="failure") | .databaseId' \
+            CURRENT_SHA=$(git rev-parse HEAD)
+            FAILED_LOGS=$(gh run list --branch "$BRANCH" --json databaseId,conclusion,headSha \
+                --jq --arg sha "$CURRENT_SHA" '.[] | select(.conclusion=="failure" and .headSha==$sha) | .databaseId' \
               | xargs -r -I{} gh run view {} --log-failed | tail -c 20000)
 
-            claude -p "PR #$PR (branch $BRANCH) has failing CI checks. Failing logs:
+            claude -p "PR #$PR (branch $BRANCH) has failing CI checks on commit $CURRENT_SHA. Failing logs:
 
           $FAILED_LOGS
 
           Diagnose and fix the issues on this branch. Commit the fix. Do not push — the workflow pushes after you finish." \
               --permission-mode bypassPermissions \
+              --allowedTools "$CLAUDE_ALLOWED_TOOLS" \
               $CLAUDE_MODEL_ARGS
 
-            git push
+            if ! git push; then
+              echo "::error::git push failed after fix attempt $ATTEMPT"
+              FINAL_STATUS="failed"
+              break
+            fi
+
+            # Wait for the new commit's checks to register before watching again —
+            # otherwise gh pr checks can see an empty check set and report success.
+            wait_for_checks_to_register
           done
 
           echo "status=$FINAL_STATUS" >> "$GITHUB_OUTPUT"
