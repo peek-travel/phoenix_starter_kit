@@ -183,10 +183,18 @@ jobs:
         with:
           name: coverage-report
           path: cover
-      - uses: VeryGoodOpenSource/very_good_coverage@v3
-        with:
-          path: 'cover/lcov.info'
-          min_coverage: 100
+      - name: Check coverage threshold
+        # VeryGoodOpenSource/very_good_coverage is archived and stuck on the
+        # node20 runtime GitHub is removing, so the check is inlined here instead.
+        env:
+          MIN_COVERAGE: '100'
+        run: |
+          COVERAGE=$(awk -F: '/^LF:/{lf+=$2} /^LH:/{lh+=$2} END{if (lf==0) print 0; else printf "%.2f", (lh/lf)*100}' cover/lcov.info)
+          echo "Line coverage: ${COVERAGE}% (minimum: ${MIN_COVERAGE}%)"
+          if awk -v c="$COVERAGE" -v m="$MIN_COVERAGE" 'BEGIN{exit !(c < m)}'; then
+            echo "::error::Coverage ${COVERAGE}% is below the required ${MIN_COVERAGE}%"
+            exit 1
+          fi
 
   credo:
     name: Credo
