@@ -43,6 +43,17 @@ jobs:
       CLAUDE_ALLOWED_TOOLS: "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(gh:*)"
       CLAUDE_MODEL_ARGS: "" # e.g. "--model claude-sonnet-5"
     steps:
+      - name: Validate Claude API key
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::APP_UPDATES_CLAUDE_API_KEY is not set. This workflow can't run Claude Code without it — set the secret (org-level recommended) and re-run."
+            exit 1
+          fi
+          if ! [[ "$ANTHROPIC_API_KEY" =~ ^sk-ant-[A-Za-z0-9_-]{20,}$ ]]; then
+            echo "::error::APP_UPDATES_CLAUDE_API_KEY doesn't look like a valid Anthropic API key (expected to start with 'sk-ant-'). Check the secret value."
+            exit 1
+          fi
+
       - name: Warn if no bot token is set
         if: ${{ secrets.APP_UPDATES_GH_TOKEN == '' }}
         run: |
