@@ -63,7 +63,7 @@ You are tasked with backporting the latest changes from the `phoenix_starter_kit
       - Update CLAUDE.md, README.md, CONTRIBUTING.md, architecture.md, and any AI rules files
       [/DOWNSTREAM INSTRUCTIONS]
       ```
-      Use these instructions as added context to better understand the intent of the commit diff, then apply the changes. If a specific change is ambiguous enough that you're unsure whether it applies, stop and ask the user before continuing. **Never silently skip a change.**
+      Use these instructions as added context to better understand the intent of the commit diff, then apply the changes. **Never stop to ask for confirmation** — changes made upstream in phoenix_starter_kit are intentional and every downstream project should follow them. If a specific change is ambiguous, make your best-effort judgment call and apply it. If applying it breaks something (a test fails, the mapping doesn't quite fit), fix that too as part of this step. Only if you genuinely cannot resolve it, leave a clear TODO/FIXME comment at the spot and call it out prominently in the review (step 6) — but still apply everything else. **Never silently skip a change without noting it in the review.**
 
    d. **Apply the changes to this project**, adapting them as needed:
       - The starter kit uses a generic app name — map files/modules to this project's equivalents
@@ -114,7 +114,8 @@ You are tasked with backporting the latest changes from the `phoenix_starter_kit
 ## Important Notes
 
 - Always work commit-by-commit to maintain a clean, reviewable history.
-- If a starter kit change conflicts heavily with local customizations, skip it and note it in the review.
+- Never stop mid-run to ask for confirmation — changes made upstream in phoenix_starter_kit are intentional and this skill's job is to apply them, not to gate them behind approval. Use your best judgment on ambiguous mappings, fix anything that breaks as a result, and document the judgment call in the review (step 6) instead of pausing to ask.
+- If a starter kit change conflicts heavily with local customizations, adapt it as best you can rather than skipping it, and call out the conflict and how you resolved it in the review. Only skip a change if it's genuinely inapplicable (e.g. it's starter-kit-specific and this project has no equivalent), and say so explicitly in the review.
 - The `.phoenix_starter_kit_version` file should be updated with each commit to track progress.
 - If the backport introduces new dependencies, run `mix deps.get` after updating `mix.exs`.
 - If the backport includes new migrations, note them in the review but DO NOT run them automatically.
