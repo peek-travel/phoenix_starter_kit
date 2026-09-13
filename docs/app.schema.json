@@ -29,12 +29,26 @@
               "maxLength": 50
             },
             "name": {
-              "type": "string",
-              "description": "The name of the app"
+              "$ref": "#/$defs/localized_text",
+              "description": "The name of the app, localized"
             },
             "shared_secret_key": {
               "type": "string",
               "description": "Shared secret key for app authentication (only included for newly created apps)"
+            },
+            "test_app_for": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "The public ID of the app this is a test/sandbox app for, or null if this is not a test app"
+            },
+            "test_app_slugs": {
+              "type": "array",
+              "description": "Public IDs of the test/sandbox apps registered against this app",
+              "items": {
+                "type": "string"
+              }
             },
             "app_version": {
               "type": "object",
@@ -43,7 +57,18 @@
                 "platform_extendables",
                 "display_version",
                 "description",
-                "status"
+                "listing_md",
+                "status",
+                "categories",
+                "tags",
+                "platforms",
+                "media",
+                "icon_url",
+                "base_url",
+                "app_urls",
+                "terms_url",
+                "privacy_url",
+                "helpdesk_url"
               ],
               "properties": {
                 "registry_extendables": {
@@ -55,7 +80,7 @@
                 },
                 "platform_extendables": {
                   "type": "object",
-                  "description": "Platform-scoped extendables for this app version, keyed by platform name (e.g. 'peek')",
+                  "description": "Platform-scoped extendables for this app version, keyed by platform name",
                   "additionalProperties": {
                     "type": "array",
                     "items": {
@@ -63,9 +88,21 @@
                     }
                   }
                 },
-                "app_url": {
-                  "type": "string",
-                  "description": "Generated URL for installing the app"
+                "app_urls": {
+                  "type": "object",
+                  "description": "App-store install links for this version, keyed by platform. Limited to the platforms this version supports.",
+                  "properties": {
+                    "peek": {
+                      "type": "string"
+                    },
+                    "acme": {
+                      "type": "string"
+                    },
+                    "cng": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
                 },
                 "helpdesk_url": {
                   "type": [
@@ -88,14 +125,27 @@
                   ],
                   "description": "URL for app privacy policy"
                 },
-                "screenshots": {
-                  "type": [
-                    "array",
-                    "null"
-                  ],
-                  "description": "Array of screenshot URLs",
+                "media": {
+                  "type": "array",
+                  "description": "Screenshots/videos for the app listing",
                   "items": {
-                    "type": "string"
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "url"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "image",
+                          "video"
+                        ]
+                      },
+                      "url": {
+                        "type": "string"
+                      }
+                    }
                   }
                 },
                 "base_url": {
@@ -119,13 +169,36 @@
                     "type": "string"
                   }
                 },
+                "tags": {
+                  "type": "array",
+                  "description": "List of tag names this app belongs to",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "platforms": {
+                  "type": "array",
+                  "description": "Platforms this app version supports",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "peek",
+                      "acme",
+                      "cng"
+                    ]
+                  }
+                },
                 "display_version": {
                   "type": "string",
                   "description": "Human-readable version string (e.g., '1.0.0')"
                 },
                 "description": {
-                  "type": "string",
-                  "description": "Description of the app"
+                  "$ref": "#/$defs/localized_text",
+                  "description": "Short, localized description of the app"
+                },
+                "listing_md": {
+                  "$ref": "#/$defs/localized_text",
+                  "description": "Localized long-form markdown listing content for the app"
                 },
                 "status": {
                   "type": "string",
@@ -137,19 +210,6 @@
                     "published"
                   ],
                   "description": "Current status of the app version"
-                },
-                "visibility": {
-                  "type": "string",
-                  "enum": [
-                    "public",
-                    "beta",
-                    "unlisted"
-                  ],
-                  "description": "Visibility level of the app"
-                },
-                "build_number": {
-                  "type": "integer",
-                  "description": "Internal build number"
                 }
               }
             }
@@ -159,6 +219,46 @@
     }
   },
   "$defs": {
+    "localized_text": {
+      "type": "object",
+      "description": "Localized text, keyed by locale. 'en' is always required.",
+      "required": [
+        "en"
+      ],
+      "properties": {
+        "en": {
+          "type": "string"
+        },
+        "fr": {
+          "type": "string"
+        },
+        "es": {
+          "type": "string"
+        },
+        "fr_ca": {
+          "type": "string"
+        },
+        "fr_fr": {
+          "type": "string"
+        },
+        "en_ca": {
+          "type": "string"
+        },
+        "en_us": {
+          "type": "string"
+        },
+        "en_gb": {
+          "type": "string"
+        },
+        "nl_nl": {
+          "type": "string"
+        },
+        "de_de": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
     "extendable": {
       "type": "object",
       "required": [
@@ -168,45 +268,13 @@
       "properties": {
         "slug": {
           "type": "string",
-          "enum": [
-            "app_registry_main_url@v1",
-            "app_registry_settings_url@v1",
-            "app_registry_webhook@v1",
-            "broadcast_to_url@v1",
-            "route_show@v1",
-            "spinnaker_ember_extension@v1",
-            "sunflower_ember_extension@v1",
-            "webhook_on_booking_canceled@v1",
-            "webhook_on_booking_created@v1",
-            "webhook_on_booking_updated@v1"
-          ],
-          "description": "The slug identifying the extendable type"
+          "description": "The slug identifying the extendable type, e.g. 'broadcast_to_url@v1'. Extendables are added to the registry frequently, so this is validated by shape rather than a fixed list.",
+          "pattern": "^[a-z][a-z0-9_]*@v[0-9]+$"
         },
         "configuration": {
           "type": "object",
           "description": "Configuration object for the extendable. The structure depends on the extendable type (slug).",
           "additionalProperties": true
-        }
-      }
-    },
-    "app_registry_main_url_config": {
-      "type": "object",
-      "required": [
-        "url"
-      ],
-      "properties": {
-        "url": {
-          "type": "string",
-          "description": "The URL to load when the app is installed"
-        },
-        "url_mode": {
-          "type": "string",
-          "enum": [
-            "prepend_base_url",
-            "preserve_relative_url"
-          ],
-          "default": "prepend_base_url",
-          "description": "How to handle the URL. 'prepend_base_url' prepends the base URL to relative URLs, 'preserve_relative_url' keeps the URL as is"
         }
       }
     },
@@ -261,7 +329,10 @@
             "enum": [
               "booking_created",
               "booking_updated",
-              "booking_canceled"
+              "booking_canceled",
+              "invoice_settled",
+              "agreement_signature_created",
+              "external_voucher_redeemed"
             ]
           },
           "description": "The events to send"
@@ -271,7 +342,10 @@
           "enum": [
             "gql",
             "booking_webhook_data",
-            "booking_id"
+            "booking_id",
+            "invoice_webhook_data",
+            "invoice_id",
+            "waiver_webhook_data"
           ],
           "default": "booking_id",
           "description": "The format of the output data"
@@ -333,7 +407,8 @@
           "type": "string",
           "enum": [
             "html",
-            "generic"
+            "generic",
+            "ember_portal"
           ],
           "description": "The type of ember extension"
         },
@@ -356,7 +431,7 @@
             "object",
             "null"
           ],
-          "description": "HTML data configuration (when type is 'html')",
+          "description": "HTML data configuration (when type is 'html' or 'ember_portal')",
           "properties": {
             "html": {
               "type": "string",
@@ -370,6 +445,11 @@
               "type": "boolean",
               "default": false,
               "description": "Whether the HTML should be injected globally"
+            },
+            "keep_observing_for_dom_changes": {
+              "type": "boolean",
+              "default": false,
+              "description": "Whether to keep re-injecting when the DOM changes"
             },
             "dependencies": {
               "type": "array",
@@ -397,6 +477,23 @@
                 "null"
               ],
               "description": "CSS selector for when to run the script"
+            },
+            "is_global_scope": {
+              "type": "boolean",
+              "default": false,
+              "description": "Whether the script should run globally"
+            },
+            "keep_observing_for_dom_changes": {
+              "type": "boolean",
+              "default": false,
+              "description": "Whether to keep re-running when the DOM changes"
+            },
+            "dependencies": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ember_dependency"
+              },
+              "description": "Additional dependencies"
             },
             "main_dependency": {
               "$ref": "#/$defs/ember_dependency",
@@ -426,7 +523,8 @@
           "type": "string",
           "enum": [
             "dependency",
-            "generic"
+            "generic",
+            "ember_portal"
           ],
           "description": "Type of dependency"
         },
@@ -439,6 +537,14 @@
           "type": "object",
           "default": {},
           "description": "Configuration for the script"
+        },
+        "url_mode": {
+          "type": "string",
+          "enum": [
+            "prepend_base_url",
+            "preserve_relative_url"
+          ],
+          "description": "How to handle the dependency URL. Only supported on some extendables (e.g. 'peek_ngw_ember_embeds@v1')"
         }
       }
     },
