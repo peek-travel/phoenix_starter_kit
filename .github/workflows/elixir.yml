@@ -165,36 +165,11 @@ jobs:
           mix run priv/repo/seeds.exs
       - name: Run tests
         id: app-tests
-        run: mix coveralls.lcov --no-compile --parallel
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v7
-        with:
-          name: coverage-report
-          path: cover/lcov.info
-          retention-days: 1
-
-  coverage_analysis:
-    name: Coverage Analysis
-    needs: tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download coverage report
-        uses: actions/download-artifact@v8
-        with:
-          name: coverage-report
-          path: cover
-      - name: Check coverage threshold
-        # VeryGoodOpenSource/very_good_coverage is archived and stuck on the
-        # node20 runtime GitHub is removing, so the check is inlined here instead.
-        env:
-          MIN_COVERAGE: '100'
-        run: |
-          COVERAGE=$(awk -F: '/^LF:/{lf+=$2} /^LH:/{lh+=$2} END{if (lf==0) print 0; else printf "%.2f", (lh/lf)*100}' cover/lcov.info)
-          echo "Line coverage: ${COVERAGE}% (minimum: ${MIN_COVERAGE}%)"
-          if awk -v c="$COVERAGE" -v m="$MIN_COVERAGE" 'BEGIN{exit !(c < m)}'; then
-            echo "::error::Coverage ${COVERAGE}% is below the required ${MIN_COVERAGE}%"
-            exit 1
-          fi
+        # `html` formatter is the one that enforces coveralls.json's
+        # coverage_options.minimum_coverage; `lcov` alone doesn't check it.
+        # Requesting both in one pass gets the threshold check without a
+        # second job/artifact round-trip.
+        run: mix coveralls.multiple --type html --type lcov --no-compile --parallel
 
   credo:
     name: Credo

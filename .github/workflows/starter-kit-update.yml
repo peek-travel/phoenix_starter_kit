@@ -164,6 +164,7 @@ jobs:
           printf '\n\nThis PR stays in draft while CI runs. It is marked ready for review automatically once checks pass, or gets a follow-up commit if Claude can fix a failure.\n' >> "$BODY_FILE"
 
           PR_URL=$(gh pr create \
+            --repo "${{ github.repository }}" \
             --draft \
             --base "$BASE_BRANCH" \
             --title "chore: backport phoenix_starter_kit updates" \
@@ -215,9 +216,14 @@ jobs:
 
             echo "Checks failed. Fix attempt $ATTEMPT of $MAX_FIX_ATTEMPTS..."
             CURRENT_SHA=$(git rev-parse HEAD)
+            # Truncate each failing run's log individually (not the concatenated
+            # blob) so one run's tail doesn't crowd out another's when multiple
+            # checks fail at once. Covers timed-out/action-required runs too,
+            # not just outright failures.
             FAILED_LOGS=$(gh run list --branch "$BRANCH" --json databaseId,conclusion,headSha \
-                --jq --arg sha "$CURRENT_SHA" '.[] | select(.conclusion=="failure" and .headSha==$sha) | .databaseId' \
-              | xargs -r -I{} gh run view {} --log-failed | tail -c 20000)
+                --jq --arg sha "$CURRENT_SHA" \
+                  '.[] | select(.headSha==$sha and (.conclusion=="failure" or .conclusion=="timed_out" or .conclusion=="action_required")) | .databaseId' \
+              | xargs -r -I{} sh -c 'gh run view "{}" --log-failed | tail -c 8000')
 
             claude -p "PR #$PR (branch $BRANCH) has failing CI checks on commit $CURRENT_SHA.
 
