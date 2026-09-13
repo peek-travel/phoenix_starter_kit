@@ -11,7 +11,7 @@ This is a **starter kit template** for building Elixir/Phoenix apps that integra
 - **Full check (format + lint + tests):** `make` — run this after every task
 - **Start dev server:** `bin/server` (runs `iex -S mix phx.server`)
 - **Start with Cloudflare tunnel:** `bin/dev` (only present if Fly.io was chosen during `bin/setup`, via `bin/enable-flyio`)
-- **Run all tests with coverage:** `make coverage` (runs `mix coveralls.lcov`)
+- **Run all tests with coverage:** `make coverage` (runs `mix coveralls.multiple --type html --type lcov`)
 - **Run a single test file:** `mix test test/path/to_test.exs`
 - **Run a single test by line:** `mix test test/path/to_test.exs:42`
 - **Format code:** `make fmt`

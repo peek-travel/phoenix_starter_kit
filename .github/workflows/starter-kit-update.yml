@@ -55,7 +55,7 @@ jobs:
       # dontAsk`. Under `bypassPermissions` it's silently ignored — allow rules
       # have no effect in that mode — so Claude could run anything (curl,
       # npm, etc.), not just git/gh. Don't reintroduce bypassPermissions here.
-      CLAUDE_ALLOWED_TOOLS: "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(gh:*)"
+      CLAUDE_ALLOWED_TOOLS: "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(gh:*),Bash(cat:*),Bash(tr:*),Bash(base64:*)"
       CLAUDE_MODEL_ARGS: "" # e.g. "--model claude-sonnet-5"
     steps:
       - name: Validate and configure Claude auth
@@ -175,6 +175,7 @@ jobs:
 
           PR_URL=$(gh pr create \
             --repo "${{ github.repository }}" \
+            --head "${{ steps.branch.outputs.name }}" \
             --draft \
             --base "$BASE_BRANCH" \
             --title "chore: backport phoenix_starter_kit updates" \
