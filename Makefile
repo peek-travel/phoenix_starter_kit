@@ -28,7 +28,7 @@ test:
 	$(MIX) test
 
 coverage:
-	$(MIX) coveralls.lcov
+	$(MIX) coveralls.multiple --type html --type lcov
 
 compile:
 	env MIX_ENV=test $(MIX) compile --warnings-as-errors

@@ -22,7 +22,8 @@ defmodule PhoenixStarterKit.MixProject do
         "coveralls.html": :test,
         "coveralls.lcov": :test,
         "coveralls.detail": :test,
-        "coveralls.github": :test
+        "coveralls.github": :test,
+        "coveralls.multiple": :test
       ]
     ]
   end
