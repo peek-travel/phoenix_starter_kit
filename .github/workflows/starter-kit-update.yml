@@ -51,6 +51,10 @@ jobs:
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
       BASE_BRANCH: main
       MAX_FIX_ATTEMPTS: 2
+      # `--allowedTools` is only an enforced allowlist under `--permission-mode
+      # dontAsk`. Under `bypassPermissions` it's silently ignored — allow rules
+      # have no effect in that mode — so Claude could run anything (curl,
+      # npm, etc.), not just git/gh. Don't reintroduce bypassPermissions here.
       CLAUDE_ALLOWED_TOOLS: "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(gh:*)"
       CLAUDE_MODEL_ARGS: "" # e.g. "--model claude-sonnet-5"
     steps:
@@ -125,7 +129,8 @@ jobs:
           - This run is unattended — no human is watching to answer questions or approve changes. Apply every change directly, do not stop to ask for confirmation. If a change is ambiguous, make your best-effort judgment call and apply it anyway; if applying it turns out to break something, fix that too. Only if you truly cannot resolve something, leave a clear TODO/FIXME comment at the spot and call it out prominently in your final summary — never silently skip a change without noting it.
           - Write your step-6 review assessment to /tmp/starter-kit-update-summary.md instead of only reporting it back to me: a one-line intro, a bullet list of backported commits (short SHA + one-line description), a section for any downstream instructions applied, and a section for anything that needed adaptation, a fix-up, or a TODO and why. This file becomes the pull request body, so write it as a clear human-facing summary.
           - If there are no new commits to backport, make no changes and write a one-line note saying so to /tmp/starter-kit-update-summary.md." \
-            --permission-mode bypassPermissions \
+            --permission-mode dontAsk \
+            --permission-prompts none \
             --allowedTools "$CLAUDE_ALLOWED_TOOLS" \
             $CLAUDE_MODEL_ARGS
 
@@ -236,7 +241,8 @@ jobs:
           </ci_log>
 
           Diagnose and fix the issues on this branch. Commit the fix. Do not push — the workflow pushes after you finish." \
-              --permission-mode bypassPermissions \
+              --permission-mode dontAsk \
+              --permission-prompts none \
               --allowedTools "$CLAUDE_ALLOWED_TOOLS" \
               $CLAUDE_MODEL_ARGS
 
