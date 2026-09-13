@@ -35,18 +35,32 @@
             }
           ]
         },
-        "screenshots": [],
+        "media": [],
         "privacy_url": null,
         "icon_url": "/images/logo.png",
         "helpdesk_url": null,
         "display_version": "0.0.1",
         "terms_url": null,
         "categories": [],
+        "tags": [],
+        "platforms": [
+          "peek"
+        ],
+        "app_urls": {},
         "base_url": "https://phoenix_starter_kit-dev.peeklabs.com",
-        "description": "Phoenix Starter Kit",
+        "description": {
+          "en": "Phoenix Starter Kit"
+        },
+        "listing_md": {
+          "en": "Phoenix Starter Kit"
+        },
         "status": "published"
       },
-      "name": "Phoenix Starter Kit (sandbox)",
+      "name": {
+        "en": "Phoenix Starter Kit (sandbox)"
+      },
+      "test_app_for": null,
+      "test_app_slugs": [],
       "id": "phoenix-starter-kit-sandbox"
     }
   }
