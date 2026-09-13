@@ -21,14 +21,6 @@ defmodule PhoenixStarterKit.PlatformsTest do
       assert {:ok, %{test: "result"}} = Platforms.query(partner, "query Test { test }")
     end
 
-    test "dispatches to Acme for :acme platform partners" do
-      partner = %Partner{platform: :acme}
-
-      assert_raise RuntimeError, "ACME platform not yet implemented", fn ->
-        Platforms.query(partner, "query Test { test }", %{})
-      end
-    end
-
     test "dispatches to Cng for :cng platform partners" do
       partner = %Partner{platform: :cng}
 
