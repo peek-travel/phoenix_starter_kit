@@ -86,10 +86,9 @@ You are tasked with backporting the latest changes from the `phoenix_starter_kit
 6. **Sweep for outdated dependencies beyond the backport.**
    Run this every time, even if step 3 found no new commits — step 5 only touches dependencies that changed upstream in phoenix_starter_kit, but this project may depend on other packages the starter kit knows nothing about.
    ```bash
-   mix local.hex --force
-   mix local.rebar --force
    mix deps.update --all
    ```
+   If this is the first time `mix` runs in this environment (e.g. a fresh local checkout — the automated CI workflow already installs these before this step runs), first run `mix local.hex --force && mix local.rebar --force`.
    - If `mix.lock` changed, create a standalone commit for it (don't fold it into a backport commit from step 5): `chore: update dependencies`.
    - If `mix deps.update --all` fails because of one specific package (e.g. an incompatible version constraint), don't abort the whole sweep — retry with that package excluded (update the rest individually with `mix deps.update <package>`), and note the failing package and why in the step 8 review.
 
@@ -108,8 +107,9 @@ You are tasked with backporting the latest changes from the `phoenix_starter_kit
         | jq -r '.results[].name'
       ```
       Pick the newest tag by date/patch suffix on the *same* codename (e.g. `trixie-20260901-slim` over `trixie-20260824-slim`). Only move to a newer codename (e.g. `bookworm` → `trixie`) if the currently pinned codename has stopped receiving new tags upstream — a codename jump is a bigger change than a patch bump and deserves that higher bar.
-   d. If a newer tag exists, update the `ARG` line(s) in the Dockerfile. Don't touch `ELIXIR_VERSION`/`OTP_VERSION` here unless the newer tag requires it — this step is about the OS flavor/patch layer, not the language version (a language version bump comes through the normal backport in step 5 when phoenix_starter_kit itself bumps it).
-   e. If anything changed, create a standalone commit: `chore: bump Docker base image to <new tag>`.
+   d. **Only write a tag you can point to verbatim in the `curl`/`jq` output from step c.** Never construct, guess, or interpolate a tag string by pattern-matching the old one (e.g. don't just bump the date portion by hand) — copy the exact matching line from the output. If `curl` is denied by the permission sandbox or returns no usable tags, skip this step entirely and note that in the step 8 review instead of guessing.
+   e. If a newer tag exists, update the `ARG` line(s) in the Dockerfile. Don't touch `ELIXIR_VERSION`/`OTP_VERSION` here unless the newer tag requires it — this step is about the OS flavor/patch layer, not the language version (a language version bump comes through the normal backport in step 5 when phoenix_starter_kit itself bumps it).
+   f. If anything changed, create a standalone commit: `chore: bump Docker base image to <new tag>`.
 
 8. **Review all changes.**
    After applying all commits, review the full diff from the branch point:
@@ -123,7 +123,7 @@ You are tasked with backporting the latest changes from the `phoenix_starter_kit
    - Any downstream instructions applied and how?
    - Any dependencies updated in step 6, or Docker base image bumped in step 7?
 
-   Report this assessment to the user.
+   Report this assessment to the user. If none of steps 5, 6, or 7 made any changes at all, say that explicitly instead of finishing silently — don't let an empty diff pass without a clear "nothing to do" statement.
 
 9. **Run the full test suite and ensure 100% coverage.**
    ```bash
