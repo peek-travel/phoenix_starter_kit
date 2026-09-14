@@ -28,7 +28,7 @@ You are tasked with backporting the latest changes from the `phoenix_starter_kit
    gh api repos/peek-travel/phoenix_starter_kit/commits?sha=master\&per_page=100 \
      --jq '.[].sha' | tac
    ```
-   Filter commits to only those **after** `$CURRENT_SHA`. If there are no new commits, stop and inform the user.
+   Filter commits to only those **after** `$CURRENT_SHA`. If there are no new commits, skip step 5 (there is nothing to backport commit-by-commit) but continue with steps 6 and 7 below — those two sweeps run every time this skill runs, independent of whether phoenix_starter_kit has new commits.
 
 4. **Review the changelog (if any).**
    Check if the starter kit has a CHANGELOG.md or release notes that provide context for the changes:
@@ -39,7 +39,7 @@ You are tasked with backporting the latest changes from the `phoenix_starter_kit
    Use any changelog information to understand the intent behind changes.
 
 5. **Implement changes commit-by-commit.**
-   For each new commit (in chronological order):
+   Skip this step entirely if step 3 found no new commits. For each new commit (in chronological order):
 
    a. **Read the commit diff:**
       ```bash
@@ -63,7 +63,7 @@ You are tasked with backporting the latest changes from the `phoenix_starter_kit
       - Update CLAUDE.md, README.md, CONTRIBUTING.md, architecture.md, and any AI rules files
       [/DOWNSTREAM INSTRUCTIONS]
       ```
-      Use these instructions as added context to better understand the intent of the commit diff, then apply the changes. **Never stop to ask for confirmation** — changes made upstream in phoenix_starter_kit are intentional and every downstream project should follow them. If a specific change is ambiguous, make your best-effort judgment call and apply it. If applying it breaks something (a test fails, the mapping doesn't quite fit), fix that too as part of this step. Only if you genuinely cannot resolve it, leave a clear TODO/FIXME comment at the spot and call it out prominently in the review (step 6) — but still apply everything else. **Never silently skip a change without noting it in the review.**
+      Use these instructions as added context to better understand the intent of the commit diff, then apply the changes. **Never stop to ask for confirmation** — changes made upstream in phoenix_starter_kit are intentional and every downstream project should follow them. If a specific change is ambiguous, make your best-effort judgment call and apply it. If applying it breaks something (a test fails, the mapping doesn't quite fit), fix that too as part of this step. Only if you genuinely cannot resolve it, leave a clear TODO/FIXME comment at the spot and call it out prominently in the review (step 8) — but still apply everything else. **Never silently skip a change without noting it in the review.**
 
    d. **Apply the changes to this project**, adapting them as needed:
       - The starter kit uses a generic app name — map files/modules to this project's equivalents
@@ -83,7 +83,35 @@ You are tasked with backporting the latest changes from the `phoenix_starter_kit
       Backported from phoenix_starter_kit@<short-SHA>
       ```
 
-6. **Review all changes.**
+6. **Sweep for outdated dependencies beyond the backport.**
+   Run this every time, even if step 3 found no new commits — step 5 only touches dependencies that changed upstream in phoenix_starter_kit, but this project may depend on other packages the starter kit knows nothing about.
+   ```bash
+   mix local.hex --force
+   mix local.rebar --force
+   mix deps.update --all
+   ```
+   - If `mix.lock` changed, create a standalone commit for it (don't fold it into a backport commit from step 5): `chore: update dependencies`.
+   - If `mix deps.update --all` fails because of one specific package (e.g. an incompatible version constraint), don't abort the whole sweep — retry with that package excluded (update the rest individually with `mix deps.update <package>`), and note the failing package and why in the step 8 review.
+
+7. **Check the Docker base image is on the latest flavor/version.**
+   Run this every time, independent of step 3's commit list.
+   a. Use Glob (`**/Dockerfile*`) to find this project's Dockerfile(s). If none exist, skip this step.
+   b. Read the `ARG` lines near the top that pin the builder (`hexpm/elixir`) and runner (`debian`/`alpine`) image tags — e.g. `ELIXIR_VERSION`, `OTP_VERSION`, and `DEBIAN_VERSION` or `ALPINE_VERSION`.
+   c. Query Docker Hub for the newest tag that matches the same Elixir/OTP combination and the same OS flavor as what's already pinned. **Never switch flavor** (Alpine stays Alpine, Debian stays Debian) — only refresh the version/date suffix:
+      ```bash
+      # Builder image — tags for the current Elixir+OTP combo
+      curl -s "https://hub.docker.com/v2/repositories/hexpm/elixir/tags?page_size=100&name=<elixir-version>-erlang-<otp-version>" \
+        | jq -r '.results[].name'
+
+      # Runner image — tags for the current flavor (swap "debian" for "alpine" if that's what's pinned)
+      curl -s "https://hub.docker.com/v2/repositories/library/debian/tags?page_size=100&name=<current-codename>" \
+        | jq -r '.results[].name'
+      ```
+      Pick the newest tag by date/patch suffix on the *same* codename (e.g. `trixie-20260901-slim` over `trixie-20260824-slim`). Only move to a newer codename (e.g. `bookworm` → `trixie`) if the currently pinned codename has stopped receiving new tags upstream — a codename jump is a bigger change than a patch bump and deserves that higher bar.
+   d. If a newer tag exists, update the `ARG` line(s) in the Dockerfile. Don't touch `ELIXIR_VERSION`/`OTP_VERSION` here unless the newer tag requires it — this step is about the OS flavor/patch layer, not the language version (a language version bump comes through the normal backport in step 5 when phoenix_starter_kit itself bumps it).
+   e. If anything changed, create a standalone commit: `chore: bump Docker base image to <new tag>`.
+
+8. **Review all changes.**
    After applying all commits, review the full diff from the branch point:
    ```bash
    git diff main...HEAD
@@ -93,32 +121,34 @@ You are tasked with backporting the latest changes from the `phoenix_starter_kit
    - Which required adaptation?
    - Any changes skipped and why?
    - Any downstream instructions applied and how?
+   - Any dependencies updated in step 6, or Docker base image bumped in step 7?
 
    Report this assessment to the user.
 
-7. **Run the full test suite and ensure 100% coverage.**
+9. **Run the full test suite and ensure 100% coverage.**
    ```bash
    make
    ```
    If tests fail or coverage drops below 100%, fix the issues before proceeding.
    Use the `/coverage` skill if needed to bring coverage back to 100%.
 
-8. **Push the branch.**
-   ```bash
-   git push -u origin HEAD
-   ```
+10. **Push the branch.**
+    ```bash
+    git push -u origin HEAD
+    ```
 
-9. **Improve this skill.**
-   If this run surfaced something this file didn't already cover — a new file-mapping pattern, a gotcha in how a starter kit change needed adapting, a `[DOWNSTREAM INSTRUCTIONS]` block that was ambiguous or missing something you had to guess at, a step that turned out to be wrong or incomplete — update this `SKILL.md` with that knowledge before finishing, so the next run starts smarter. Keep additions concrete and short (a bullet under "Important Notes", or a tweak to the relevant step); don't pad the file with narration. If the fix is something upstream `phoenix_starter_kit` itself should know (e.g. a commit that was missing a `[DOWNSTREAM INSTRUCTIONS]` block it needed), mention that in your report to the user rather than trying to change the upstream repo yourself.
+11. **Improve this skill.**
+    If this run surfaced something this file didn't already cover — a new file-mapping pattern, a gotcha in how a starter kit change needed adapting, a `[DOWNSTREAM INSTRUCTIONS]` block that was ambiguous or missing something you had to guess at, a step that turned out to be wrong or incomplete — update this `SKILL.md` with that knowledge before finishing, so the next run starts smarter. Keep additions concrete and short (a bullet under "Important Notes", or a tweak to the relevant step); don't pad the file with narration. If the fix is something upstream `phoenix_starter_kit` itself should know (e.g. a commit that was missing a `[DOWNSTREAM INSTRUCTIONS]` block it needed), mention that in your report to the user rather than trying to change the upstream repo yourself.
 
 ## Important Notes
 
 - Always work commit-by-commit to maintain a clean, reviewable history.
-- Never stop mid-run to ask for confirmation — changes made upstream in phoenix_starter_kit are intentional and this skill's job is to apply them, not to gate them behind approval. Use your best judgment on ambiguous mappings, fix anything that breaks as a result, and document the judgment call in the review (step 6) instead of pausing to ask.
+- Never stop mid-run to ask for confirmation — changes made upstream in phoenix_starter_kit are intentional and this skill's job is to apply them, not to gate them behind approval. Use your best judgment on ambiguous mappings, fix anything that breaks as a result, and document the judgment call in the review (step 8) instead of pausing to ask.
 - If a starter kit change conflicts heavily with local customizations, adapt it as best you can rather than skipping it, and call out the conflict and how you resolved it in the review. Only skip a change if it's genuinely inapplicable (e.g. it's starter-kit-specific and this project has no equivalent), and say so explicitly in the review.
 - The `.phoenix_starter_kit_version` file should be updated with each commit to track progress.
 - If the backport introduces new dependencies, run `mix deps.get` after updating `mix.exs`.
 - If the backport includes new migrations, note them in the review but DO NOT run them automatically.
 - Downstream instructions in commit messages are authoritative — apply them even if the diff itself doesn't touch those files.
 - Never apply `mix.lock` or Dockerfile diffs verbatim — re-derive the equivalent change for this project's own files (see step 5d).
+- Steps 6 (dependency sweep) and 7 (Docker base image check) run on **every** invocation of this skill, even when step 3 finds no new starter kit commits to backport — they catch drift in this project's own extra dependencies and container base image, not just what changed upstream.
 - This skill file itself lives in the starter kit template, so it ships to every project created from it — keep it generically useful, not specific to any one downstream project's quirks.

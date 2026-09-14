@@ -22,6 +22,12 @@ name: Starter Kit Update
 #                                          trigger on the bot's push; without
 #                                          it the PR stays draft forever)
 #   - Secret SLACK_WEBHOOK_URL           (optional — skips the Slack step if unset)
+#
+# No new secrets are needed for the dependency/Docker-image sweeps in the
+# skill (steps 6-7 of .claude/skills/starter-kit-update/SKILL.md) — they run
+# with the Elixir toolchain installed below and public, unauthenticated
+# curl requests to Docker Hub's tags API. The runner does need outbound
+# network access to hub.docker.com for that check to work.
 
 on:
   schedule:
@@ -55,7 +61,16 @@ jobs:
       # dontAsk`. Under `bypassPermissions` it's silently ignored — allow rules
       # have no effect in that mode — so Claude could run anything (curl,
       # npm, etc.), not just git/gh. Don't reintroduce bypassPermissions here.
-      CLAUDE_ALLOWED_TOOLS: "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(gh:*),Bash(cat:*),Bash(tr:*),Bash(base64:*)"
+      #
+      # Bash(mix:*) lets the skill's dependency sweep (mix deps.update --all)
+      # run for real — the Elixir toolchain is installed below via
+      # erlef/setup-beam so mix actually works on this runner.
+      # Bash(curl:*) and Bash(jq:*) let the skill's Docker base image check
+      # query Docker Hub's public tags API. curl is a broad allow (any URL,
+      # not just hub.docker.com) since --allowedTools only matches on command
+      # prefix — accepted here because the skill only ever issues GET
+      # requests to read public tag lists, never uploads data.
+      CLAUDE_ALLOWED_TOOLS: "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(gh:*),Bash(cat:*),Bash(tr:*),Bash(base64:*),Bash(mix:*),Bash(curl:*),Bash(jq:*)"
       CLAUDE_MODEL_ARGS: "" # e.g. "--model claude-sonnet-5"
     steps:
       - name: Validate and configure Claude auth
@@ -107,6 +122,19 @@ jobs:
           git config user.name "app-updates-bot"
           git config user.email "app-updates-bot@users.noreply.github.com"
 
+      # Needed so the skill's dependency sweep (mix deps.update --all) can
+      # actually run mix. Reads .tool-versions instead of a hardcoded
+      # version so this works whatever Elixir/OTP each child repo pins.
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          version-file: .tool-versions
+
+      - name: Install hex and rebar
+        run: |
+          mix local.hex --force
+          mix local.rebar --force
+
       - name: Cache npm downloads
         uses: actions/cache@v6
         with:
@@ -129,11 +157,11 @@ jobs:
 
           Overrides for this automated run:
           - Skip step 1 of the skill (do not run 'git checkout -b'). A branch named ${{ steps.branch.outputs.name }} is already created and checked out — stay on it.
-          - Skip the step that runs 'make' locally. This runner has no Elixir/Postgres toolchain — this repo's own CI workflow will run the full test suite against the pushed branch instead, and that result is what gates this PR.
+          - Skip the step that runs 'make' locally. This runner has Elixir installed (for the dependency sweep) but no Postgres service and no asset-build tooling set up — this repo's own CI workflow will run the full test suite against the pushed branch instead, and that result is what gates this PR.
           - Do not push the branch and do not open a pull request yourself. The automation does both of those after you finish.
           - This run is unattended — no human is watching to answer questions or approve changes. Apply every change directly, do not stop to ask for confirmation. If a change is ambiguous, make your best-effort judgment call and apply it anyway; if applying it turns out to break something, fix that too. Only if you truly cannot resolve something, leave a clear TODO/FIXME comment at the spot and call it out prominently in your final summary — never silently skip a change without noting it.
-          - Write your step-6 review assessment to /tmp/starter-kit-update-summary.md instead of only reporting it back to me: a one-line intro, a bullet list of backported commits (short SHA + one-line description), a section for any downstream instructions applied, and a section for anything that needed adaptation, a fix-up, or a TODO and why. This file becomes the pull request body, so write it as a clear human-facing summary.
-          - If there are no new commits to backport, make no changes and write a one-line note saying so to /tmp/starter-kit-update-summary.md." \
+          - Write your step-8 review assessment to /tmp/starter-kit-update-summary.md instead of only reporting it back to me: a one-line intro, a bullet list of backported commits (short SHA + one-line description), a section for any downstream instructions applied, a section for any dependency updates from step 6 or Docker base image bump from step 7, and a section for anything that needed adaptation, a fix-up, or a TODO and why. This file becomes the pull request body, so write it as a clear human-facing summary.
+          - If there are no new commits to backport, skip step 5 but still run steps 6 and 7 (the dependency and Docker base image sweeps) — they apply independent of whether phoenix_starter_kit has new commits. If those sweeps also make no changes, then make no changes overall and write a one-line note saying so to /tmp/starter-kit-update-summary.md." \
             --permission-mode dontAsk \
             --permission-prompts none \
             --allowedTools "$CLAUDE_ALLOWED_TOOLS" \
