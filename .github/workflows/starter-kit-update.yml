@@ -93,7 +93,11 @@ jobs:
       # rationale below: a prompt-injection payload in an upstream commit
       # message or a CI log could reach the network/filesystem via `mix`
       # even with curl itself locked down. Only allow what the skill's
-      # dependency sweep (step 6) actually runs.
+      # dependency sweep (step 6) actually runs. Bash(mix compile:*) is
+      # included too, for the Important Notes guidance to re-run
+      # `mix compile --warnings-as-errors` after an Elixir/OTP or Docker
+      # base image bump (step 7) — newer toolchains commonly surface new
+      # compiler warnings that need fixing as part of the same commit.
       # Bash(jq:*) lets the skill's Docker base image check parse Docker
       # Hub's tag list JSON — jq has no network/side-effect capability so
       # it's safe to allow broadly.
@@ -108,7 +112,7 @@ jobs:
       # .claude/skills/starter-kit-update/SKILL.md step 7c — if that step's
       # command shape changes, this pattern must change with it or the
       # sweep silently loses curl access.
-      CLAUDE_ALLOWED_TOOLS: "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(gh:*),Bash(cat:*),Bash(tr:*),Bash(base64:*),Bash(mix deps.update:*),Bash(mix deps.get:*),Bash(mix local.hex:*),Bash(mix local.rebar:*),Bash(jq:*),Bash(curl -s https://hub.docker.com/*),Bash(curl -s \"https://hub.docker.com/*)"
+      CLAUDE_ALLOWED_TOOLS: "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(gh:*),Bash(cat:*),Bash(tr:*),Bash(base64:*),Bash(mix deps.update:*),Bash(mix deps.get:*),Bash(mix local.hex:*),Bash(mix local.rebar:*),Bash(mix compile:*),Bash(jq:*),Bash(curl -s https://hub.docker.com/*),Bash(curl -s \"https://hub.docker.com/*)"
       CLAUDE_MODEL_ARGS: "" # e.g. "--model claude-sonnet-5"
     steps:
       - name: Validate and configure Claude auth
