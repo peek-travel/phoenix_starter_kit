@@ -172,6 +172,10 @@ jobs:
         uses: erlef/setup-beam@v1
         with:
           version-file: .tool-versions
+          # erlef/setup-beam now requires this explicitly whenever
+          # version-file is set — it errors otherwise ("you have to set
+          # version-type=strict if you're using version-file").
+          version-type: strict
 
       - name: Install hex and rebar
         run: |
@@ -216,6 +220,7 @@ jobs:
         uses: erlef/setup-beam@v1
         with:
           version-file: .tool-versions
+          version-type: strict
 
       - name: Re-install hex and rebar for the re-synced toolchain
         run: |
