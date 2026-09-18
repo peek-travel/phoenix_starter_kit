@@ -19,11 +19,19 @@ name: Starter Kit Update
 #       env var that kind needs.
 #   - Secret APP_UPDATES_GH_TOKEN        (bot PAT or GitHub App token, repo +
 #                                          workflow scope — REQUIRED for CI to
-#                                          trigger on the bot's push; without
-#                                          it the PR stays draft forever)
-#       Token priority (see GH_TOKEN below): APP_UPDATES_GH_TOKEN, then the
-#       org-level ACME_CI_GITHUB_TOKEN fallback, then the built-in
-#       GITHUB_TOKEN (which does NOT trigger this repo's CI on push).
+#                                          trigger on the bot's push, unless
+#                                          one of the org-level fallbacks
+#                                          below is set instead; without any
+#                                          of the three the job fails fast)
+#       Token priority: APP_UPDATES_GH_TOKEN (this repo's own), then the
+#       org-level ACME_CI_GITHUB_TOKEN fallback, then the org-level GH_TOKEN
+#       fallback — for repos/orgs that don't have their own
+#       APP_UPDATES_GH_TOKEN secret set. There is no fallback to the
+#       automatic, built-in GITHUB_TOKEN — it does NOT trigger this repo's
+#       CI on push, so using it here would just let the job silently
+#       degrade into a PR that never leaves draft. If none of the three
+#       secrets are set, the job fails outright instead (see "Fail if no
+#       token is configured" below).
 #   - Secret SLACK_WEBHOOK_URL           (optional — skips the Slack step if unset)
 #
 # No new secrets are needed for the dependency/Docker-image sweeps in the
@@ -53,20 +61,22 @@ jobs:
       # (checkout via `env.GH_TOKEN` below, plus every `gh`/git push, which
       # pick GH_TOKEN up automatically). Priority: APP_UPDATES_GH_TOKEN (this
       # repo's own bot PAT/App token) → ACME_CI_GITHUB_TOKEN (org-level
-      # fallback for repos that don't have their own) → GITHUB_TOKEN (built
-      # in, but pushes made with it do NOT trigger this repo's other
-      # workflows — see the warning step below).
+      # fallback for repos that don't have their own) → GH_TOKEN (a further
+      # org-level fallback secret). No fallback to the automatic, built-in
+      # GITHUB_TOKEN — pushes made with it do NOT trigger this repo's other
+      # workflows, so it would silently leave the PR in draft forever
+      # instead of surfacing a real error. See the fail-fast step below.
       #
       # Can't split this into a separate BOT_TOKEN var that GH_TOKEN then
       # reads via `env.BOT_TOKEN`: the `env` context isn't available while
       # this same env: block is still being evaluated.
-      GH_TOKEN: ${{ secrets.APP_UPDATES_GH_TOKEN || secrets.ACME_CI_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.APP_UPDATES_GH_TOKEN || secrets.ACME_CI_GITHUB_TOKEN || secrets.GH_TOKEN }}
       # `secrets` isn't a readable context inside `if:` conditions (actionlint
       # flags it, and GitHub rejects the whole workflow file for it — every
       # push then gets a synthetic failed run with zero jobs). Route it
       # through `env:` instead, which can reference secrets, and check it in
       # plain bash inside the step.
-      HAS_BOT_TOKEN: ${{ secrets.APP_UPDATES_GH_TOKEN != '' || secrets.ACME_CI_GITHUB_TOKEN != '' }}
+      HAS_BOT_TOKEN: ${{ secrets.APP_UPDATES_GH_TOKEN != '' || secrets.ACME_CI_GITHUB_TOKEN != '' || secrets.GH_TOKEN != '' }}
       CLAUDE_AUTH_VALUE: ${{ secrets.APP_UPDATES_CLAUDE_API_KEY }}
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
       BASE_BRANCH: main
@@ -127,10 +137,11 @@ jobs:
               ;;
           esac
 
-      - name: Warn if no bot token is set
+      - name: Fail if no token is configured
         run: |
           if [ "$HAS_BOT_TOKEN" != "true" ]; then
-            echo "::warning::Neither APP_UPDATES_GH_TOKEN nor ACME_CI_GITHUB_TOKEN is set for this repo. Falling back to GITHUB_TOKEN — the branch push below will NOT trigger this repo's own CI workflow, so 'wait for checks' will find no checks and the PR will stay in draft forever. Add an APP_UPDATES_GH_TOKEN secret (bot PAT or GitHub App token, repo + workflow scope), or set ACME_CI_GITHUB_TOKEN at the org level, to fix this."
+            echo "::error::None of APP_UPDATES_GH_TOKEN, ACME_CI_GITHUB_TOKEN, or GH_TOKEN is set for this repo. This workflow has no automatic fallback (the built-in GITHUB_TOKEN doesn't trigger this repo's own CI on push, so it would just leave the PR stuck in draft forever). Set one of those three secrets — repo-level APP_UPDATES_GH_TOKEN, or an org-level ACME_CI_GITHUB_TOKEN / GH_TOKEN — to a bot PAT or GitHub App token with repo + workflow scope, then re-run."
+            exit 1
           fi
 
       - uses: actions/checkout@v7
