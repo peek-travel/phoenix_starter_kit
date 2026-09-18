@@ -21,6 +21,9 @@ name: Starter Kit Update
 #                                          workflow scope — REQUIRED for CI to
 #                                          trigger on the bot's push; without
 #                                          it the PR stays draft forever)
+#       Token priority (see GH_TOKEN below): APP_UPDATES_GH_TOKEN, then the
+#       org-level ACME_CI_GITHUB_TOKEN fallback, then the built-in
+#       GITHUB_TOKEN (which does NOT trigger this repo's CI on push).
 #   - Secret SLACK_WEBHOOK_URL           (optional — skips the Slack step if unset)
 #
 # No new secrets are needed for the dependency/Docker-image sweeps in the
@@ -46,13 +49,24 @@ jobs:
       actions: read
       checks: read
     env:
-      GH_TOKEN: ${{ secrets.APP_UPDATES_GH_TOKEN || secrets.GITHUB_TOKEN }}
+      # Single source of truth for which token this job uses everywhere
+      # (checkout via `env.GH_TOKEN` below, plus every `gh`/git push, which
+      # pick GH_TOKEN up automatically). Priority: APP_UPDATES_GH_TOKEN (this
+      # repo's own bot PAT/App token) → ACME_CI_GITHUB_TOKEN (org-level
+      # fallback for repos that don't have their own) → GITHUB_TOKEN (built
+      # in, but pushes made with it do NOT trigger this repo's other
+      # workflows — see the warning step below).
+      #
+      # Can't split this into a separate BOT_TOKEN var that GH_TOKEN then
+      # reads via `env.BOT_TOKEN`: the `env` context isn't available while
+      # this same env: block is still being evaluated.
+      GH_TOKEN: ${{ secrets.APP_UPDATES_GH_TOKEN || secrets.ACME_CI_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
       # `secrets` isn't a readable context inside `if:` conditions (actionlint
       # flags it, and GitHub rejects the whole workflow file for it — every
       # push then gets a synthetic failed run with zero jobs). Route it
       # through `env:` instead, which can reference secrets, and check it in
       # plain bash inside the step.
-      HAS_BOT_TOKEN: ${{ secrets.APP_UPDATES_GH_TOKEN != '' }}
+      HAS_BOT_TOKEN: ${{ secrets.APP_UPDATES_GH_TOKEN != '' || secrets.ACME_CI_GITHUB_TOKEN != '' }}
       CLAUDE_AUTH_VALUE: ${{ secrets.APP_UPDATES_CLAUDE_API_KEY }}
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
       BASE_BRANCH: main
@@ -116,12 +130,12 @@ jobs:
       - name: Warn if no bot token is set
         run: |
           if [ "$HAS_BOT_TOKEN" != "true" ]; then
-            echo "::warning::APP_UPDATES_GH_TOKEN is not set for this repo. Falling back to GITHUB_TOKEN — the branch push below will NOT trigger this repo's own CI workflow, so 'wait for checks' will find no checks and the PR will stay in draft forever. Add an APP_UPDATES_GH_TOKEN secret (bot PAT or GitHub App token, repo + workflow scope) to fix this."
+            echo "::warning::Neither APP_UPDATES_GH_TOKEN nor ACME_CI_GITHUB_TOKEN is set for this repo. Falling back to GITHUB_TOKEN — the branch push below will NOT trigger this repo's own CI workflow, so 'wait for checks' will find no checks and the PR will stay in draft forever. Add an APP_UPDATES_GH_TOKEN secret (bot PAT or GitHub App token, repo + workflow scope), or set ACME_CI_GITHUB_TOKEN at the org level, to fix this."
           fi
 
       - uses: actions/checkout@v7
         with:
-          token: ${{ secrets.APP_UPDATES_GH_TOKEN || secrets.GITHUB_TOKEN }}
+          token: ${{ env.GH_TOKEN }}
           fetch-depth: 0
 
       - name: Configure git identity
@@ -262,22 +276,62 @@ jobs:
 
           PR="${{ steps.pr.outputs.number }}"
           BRANCH="${{ steps.branch.outputs.name }}"
+          REPO="${{ github.repository }}"
           ATTEMPT=0
           FINAL_STATUS="unknown"
 
+          # Polls the REST check-runs/commit-status endpoints instead of
+          # `gh pr checks --watch`. `gh pr checks` goes through GraphQL's
+          # `statusCheckRollup` field, which some PATs (older classic
+          # tokens without every fine-grained scope, or newer fine-grained
+          # tokens missing "Checks") can't query — it fails with a GraphQL
+          # "Resource not accessible by personal access token" error. The
+          # REST endpoints below need only the same repo-read access
+          # already required to see CI results at all, so they work
+          # regardless of which kind of token is configured.
           wait_for_checks_to_register() {
+            local sha="$1"
             for i in $(seq 1 12); do
-              COUNT=$(gh pr checks "$PR" --json name --jq 'length' 2>/dev/null || echo 0)
-              [ "$COUNT" -gt 0 ] && break
+              RUN_COUNT=$(gh api "repos/$REPO/commits/$sha/check-runs" --jq '.total_count' 2>/dev/null)
+              STATUS_COUNT=$(gh api "repos/$REPO/commits/$sha/status" --jq '.statuses | length' 2>/dev/null)
+              if [ "${RUN_COUNT:-0}" -gt 0 ] || [ "${STATUS_COUNT:-0}" -gt 0 ]; then
+                return 0
+              fi
               sleep 10
             done
           }
 
-          # Give GitHub a moment to register check runs from the push before watching them.
-          wait_for_checks_to_register
+          # Polls $sha's check runs and legacy commit statuses until none
+          # are pending, then returns 0 if everything succeeded (success,
+          # neutral, or skipped) or 1 if anything failed.
+          poll_checks() {
+            local sha="$1"
+            while true; do
+              RUNS=$(gh api "repos/$REPO/commits/$sha/check-runs" --jq '.check_runs' 2>/dev/null)
+              STATUSES=$(gh api "repos/$REPO/commits/$sha/status" --jq '.statuses' 2>/dev/null)
+              [ -z "$RUNS" ] && RUNS="[]"
+              [ -z "$STATUSES" ] && STATUSES="[]"
+
+              PENDING=$(( $(echo "$RUNS" | jq '[.[] | select(.status != "completed")] | length') \
+                        + $(echo "$STATUSES" | jq '[.[] | select(.state == "pending")] | length') ))
+              if [ "$PENDING" -gt 0 ]; then
+                sleep 30
+                continue
+              fi
+
+              FAILED=$(( $(echo "$RUNS" | jq '[.[] | select(.conclusion != "success" and .conclusion != "neutral" and .conclusion != "skipped")] | length') \
+                       + $(echo "$STATUSES" | jq '[.[] | select(.state != "success")] | length') ))
+              [ "$FAILED" -eq 0 ] && return 0 || return 1
+            done
+          }
+
+          CURRENT_SHA=$(git rev-parse HEAD)
+
+          # Give GitHub a moment to register check runs from the push before polling them.
+          wait_for_checks_to_register "$CURRENT_SHA"
 
           while true; do
-            gh pr checks "$PR" --watch --interval 30
+            poll_checks "$CURRENT_SHA"
             if [ "$?" -eq 0 ]; then
               FINAL_STATUS="passed"
               break
@@ -290,7 +344,6 @@ jobs:
             ATTEMPT=$((ATTEMPT + 1))
 
             echo "Checks failed. Fix attempt $ATTEMPT of $MAX_FIX_ATTEMPTS..."
-            CURRENT_SHA=$(git rev-parse HEAD)
             # Truncate each failing run's log individually (not the concatenated
             # blob) so one run's tail doesn't crowd out another's when multiple
             # checks fail at once. Covers timed-out/action-required runs too,
@@ -330,9 +383,10 @@ jobs:
               break
             fi
 
-            # Wait for the new commit's checks to register before watching again —
-            # otherwise gh pr checks can see an empty check set and report success.
-            wait_for_checks_to_register
+            # Wait for the new commit's checks to register before polling again —
+            # otherwise poll_checks can see an empty check set and report success.
+            CURRENT_SHA=$(git rev-parse HEAD)
+            wait_for_checks_to_register "$CURRENT_SHA"
           done
 
           echo "status=$FINAL_STATUS" >> "$GITHUB_OUTPUT"
