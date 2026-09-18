@@ -86,9 +86,14 @@ jobs:
       # have no effect in that mode — so Claude could run anything (curl,
       # npm, etc.), not just git/gh. Don't reintroduce bypassPermissions here.
       #
-      # Bash(mix:*) lets the skill's dependency sweep (mix deps.update --all)
-      # run for real — the Elixir toolchain is installed below via
-      # erlef/setup-beam so mix actually works on this runner.
+      # The mix subcommands are scoped individually, not `Bash(mix:*)` —
+      # `mix` is a general code-execution entry point (`mix run -e '...'`,
+      # `mix eval 'System.cmd("curl", [...])'`, or a task added by an
+      # updated dep), so an unscoped allow would defeat the curl scoping
+      # rationale below: a prompt-injection payload in an upstream commit
+      # message or a CI log could reach the network/filesystem via `mix`
+      # even with curl itself locked down. Only allow what the skill's
+      # dependency sweep (step 6) actually runs.
       # Bash(jq:*) lets the skill's Docker base image check parse Docker
       # Hub's tag list JSON — jq has no network/side-effect capability so
       # it's safe to allow broadly.
@@ -96,12 +101,14 @@ jobs:
       # allowed broadly — this runner also feeds untrusted text (upstream
       # commit messages, raw CI failure logs) into Claude's prompts, so an
       # unscoped Bash(curl:*) would let a prompt-injection payload in that
-      # text make the bot exfiltrate data to an arbitrary URL. Keep this
-      # prefix in sync with the curl invocations in
+      # text make the bot exfiltrate data to an arbitrary URL. Both quoting
+      # forms are allowed since the allowlist does literal prefix matching
+      # and SKILL.md step 7c's exact quoting could shift. Keep these
+      # prefixes in sync with the curl invocations in
       # .claude/skills/starter-kit-update/SKILL.md step 7c — if that step's
       # command shape changes, this pattern must change with it or the
       # sweep silently loses curl access.
-      CLAUDE_ALLOWED_TOOLS: "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(gh:*),Bash(cat:*),Bash(tr:*),Bash(base64:*),Bash(mix:*),Bash(jq:*),Bash(curl -s \"https://hub.docker.com/*)"
+      CLAUDE_ALLOWED_TOOLS: "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(gh:*),Bash(cat:*),Bash(tr:*),Bash(base64:*),Bash(mix deps.update:*),Bash(mix deps.get:*),Bash(mix local.hex:*),Bash(mix local.rebar:*),Bash(jq:*),Bash(curl -s https://hub.docker.com/*),Bash(curl -s \"https://hub.docker.com/*)"
       CLAUDE_MODEL_ARGS: "" # e.g. "--model claude-sonnet-5"
     steps:
       - name: Validate and configure Claude auth
@@ -317,6 +324,13 @@ jobs:
           # REST endpoints below need only the same repo-read access
           # already required to see CI results at all, so they work
           # regardless of which kind of token is configured.
+          # Returns 1 (not just falling through) if the budget expires with
+          # zero checks ever registered — a caller that ignores this and
+          # polls anyway would see two empty arrays, compute PENDING=0 /
+          # FAILED=0, and report a false "passed". That's exactly the
+          # silent degradation the fail-fast token step earlier in this job
+          # exists to prevent (a push that never triggered CI would then
+          # yield a green-looking PR instead of a clear error).
           wait_for_checks_to_register() {
             local sha="$1"
             for i in $(seq 1 12); do
@@ -327,18 +341,27 @@ jobs:
               fi
               sleep 10
             done
+            return 1
           }
 
           # Polls $sha's check runs and legacy commit statuses until none
           # are pending, then returns 0 if everything succeeded (success,
-          # neutral, or skipped) or 1 if anything failed.
+          # neutral, or skipped) or 1 if anything failed. A transient `gh
+          # api` failure (rate limit, network blip) retries instead of
+          # falling back to an empty array — treating a failed call the
+          # same as a genuinely empty result would let PENDING/FAILED both
+          # compute to 0 and report a false "passed" mid-outage.
           poll_checks() {
             local sha="$1"
             while true; do
-              RUNS=$(gh api "repos/$REPO/commits/$sha/check-runs" --jq '.check_runs' 2>/dev/null)
-              STATUSES=$(gh api "repos/$REPO/commits/$sha/status" --jq '.statuses' 2>/dev/null)
-              [ -z "$RUNS" ] && RUNS="[]"
-              [ -z "$STATUSES" ] && STATUSES="[]"
+              if ! RUNS=$(gh api "repos/$REPO/commits/$sha/check-runs" --jq '.check_runs' 2>/dev/null); then
+                sleep 30
+                continue
+              fi
+              if ! STATUSES=$(gh api "repos/$REPO/commits/$sha/status" --jq '.statuses' 2>/dev/null); then
+                sleep 30
+                continue
+              fi
 
               PENDING=$(( $(echo "$RUNS" | jq '[.[] | select(.status != "completed")] | length') \
                         + $(echo "$STATUSES" | jq '[.[] | select(.state == "pending")] | length') ))
@@ -356,9 +379,12 @@ jobs:
           CURRENT_SHA=$(git rev-parse HEAD)
 
           # Give GitHub a moment to register check runs from the push before polling them.
-          wait_for_checks_to_register "$CURRENT_SHA"
+          if ! wait_for_checks_to_register "$CURRENT_SHA"; then
+            echo "::error::No check runs registered for $CURRENT_SHA — CI did not trigger on the bot push."
+            FINAL_STATUS="failed"
+          fi
 
-          while true; do
+          while [ "$FINAL_STATUS" = "unknown" ]; do
             poll_checks "$CURRENT_SHA"
             if [ "$?" -eq 0 ]; then
               FINAL_STATUS="passed"
@@ -414,7 +440,10 @@ jobs:
             # Wait for the new commit's checks to register before polling again —
             # otherwise poll_checks can see an empty check set and report success.
             CURRENT_SHA=$(git rev-parse HEAD)
-            wait_for_checks_to_register "$CURRENT_SHA"
+            if ! wait_for_checks_to_register "$CURRENT_SHA"; then
+              echo "::error::No check runs registered for $CURRENT_SHA — CI did not trigger on the fix-attempt push."
+              FINAL_STATUS="failed"
+            fi
           done
 
           echo "status=$FINAL_STATUS" >> "$GITHUB_OUTPUT"
