@@ -268,10 +268,17 @@ jobs:
           # leave `git log main..HEAD` non-empty but change no file, which
           # used to open empty PRs. The skill's own SKILL.md (and its pending
           # copy) don't count either — a self-improvement alone is not worth
-          # a PR. It is dropped here; the next run's step 11 parks it again
-          # and it lands with that run's real change. An upstream SKILL.md
+          # a PR, so it is dropped here. It lands only when a later run that
+          # parks it again also has a real change. An upstream SKILL.md
           # change still opens a PR: its backport also bumps
           # .phoenix_starter_kit_version.
+          #
+          # `git diff` exits 128 on a missing ref, which would read as "has
+          # changes" below, so check the base first.
+          if ! git rev-parse --verify --quiet "$BASE_BRANCH" > /dev/null; then
+            echo "::error::Base branch '$BASE_BRANCH' is not a local ref. Run this workflow from $BASE_BRANCH."
+            exit 1
+          fi
           if git diff --quiet "$BASE_BRANCH" HEAD -- . \
               ':(exclude).claude/skills/starter-kit-update/SKILL.md' \
               ':(exclude).github/starter-kit-update-SKILL.pending.md'; then
@@ -343,6 +350,27 @@ jobs:
           ATTEMPT=0
           FINAL_STATUS="unknown"
 
+          # Calls `gh api` and prints the response. Returns 3 when the token
+          # gets HTTP 403 "Resource not accessible by personal access token"
+          # (or "... by integration") — a token without "Checks: read" /
+          # "Commit statuses: read". Retrying can't fix that, and counting it
+          # as a CI failure sends a false "needs a human" alert while CI is
+          # actually green. A rate-limit 403 has another message and returns
+          # 1 like any other failure, so callers retry it. stderr stays
+          # hidden (as before) except for the permission error.
+          api_get() {
+            local err rc
+            err=$(mktemp)
+            gh api "$@" 2>"$err"
+            rc=$?
+            if [ "$rc" -ne 0 ] && grep -q 'HTTP 403' "$err" && grep -q 'Resource not accessible' "$err"; then
+              cat "$err" >&2
+              rc=3
+            fi
+            rm -f "$err"
+            return "$rc"
+          }
+
           # Polls the REST check-runs/commit-status endpoints instead of
           # `gh pr checks --watch`. `gh pr checks` goes through GraphQL's
           # `statusCheckRollup` field, which some PATs (older classic
@@ -358,29 +386,8 @@ jobs:
           # FAILED=0, and report a false "passed". That's exactly the
           # silent degradation the fail-fast token step earlier in this job
           # exists to prevent (a push that never triggered CI would then
-          # yield a green-looking PR instead of a clear error).
-          #
-          # Both functions return 3 when the token gets HTTP 403 ("Resource
-          # not accessible by personal access token") — a fine-grained PAT
-          # without "Checks: read" / "Commit statuses: read". Retrying can't
-          # fix that, and counting it as a CI failure sends a false "needs a
-          # human" alert while CI is actually green.
-
-          # `gh api` with stderr captured: prints the response, returns 3 on
-          # HTTP 403 and 1 on any other failure.
-          api_get() {
-            local err rc
-            err=$(mktemp)
-            gh api "$@" 2>"$err"
-            rc=$?
-            if [ "$rc" -ne 0 ] && grep -q 'HTTP 403' "$err"; then
-              rc=3
-            fi
-            cat "$err" >&2
-            rm -f "$err"
-            return "$rc"
-          }
-
+          # yield a green-looking PR instead of a clear error). Returns 3 on
+          # the api_get permission error.
           wait_for_checks_to_register() {
             local sha="$1"
             for i in $(seq 1 12); do
@@ -442,18 +449,24 @@ jobs:
             FINAL_STATUS="token_forbidden"
           }
 
+          # Waits for $1's checks to register and sets FINAL_STATUS when
+          # they don't. $2 names the push for the error message.
+          await_registration() {
+            wait_for_checks_to_register "$1"
+            case "$?" in
+              0) ;;
+              3) token_forbidden "$1" ;;
+              *)
+                echo "::error::No check runs registered for $1 — CI did not trigger on the $2."
+                FINAL_STATUS="failed"
+                ;;
+            esac
+          }
+
           CURRENT_SHA=$(git rev-parse HEAD)
 
           # Give GitHub a moment to register check runs from the push before polling them.
-          wait_for_checks_to_register "$CURRENT_SHA"
-          case "$?" in
-            0) ;;
-            3) token_forbidden "$CURRENT_SHA" ;;
-            *)
-              echo "::error::No check runs registered for $CURRENT_SHA — CI did not trigger on the bot push."
-              FINAL_STATUS="failed"
-              ;;
-          esac
+          await_registration "$CURRENT_SHA" "bot push"
 
           while [ "$FINAL_STATUS" = "unknown" ]; do
             poll_checks "$CURRENT_SHA"
@@ -516,15 +529,7 @@ jobs:
             # Wait for the new commit's checks to register before polling again —
             # otherwise poll_checks can see an empty check set and report success.
             CURRENT_SHA=$(git rev-parse HEAD)
-            wait_for_checks_to_register "$CURRENT_SHA"
-            case "$?" in
-              0) ;;
-              3) token_forbidden "$CURRENT_SHA" ;;
-              *)
-                echo "::error::No check runs registered for $CURRENT_SHA — CI did not trigger on the fix-attempt push."
-                FINAL_STATUS="failed"
-                ;;
-            esac
+            await_registration "$CURRENT_SHA" "fix-attempt push"
           done
 
           echo "status=$FINAL_STATUS" >> "$GITHUB_OUTPUT"
