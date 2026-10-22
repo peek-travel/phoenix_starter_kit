@@ -1,0 +1,118 @@
+#!/bin/bash
+#
+# Bumps the versions Dependabot can't see:
+#   - Elixir/Erlang in .tool-versions, .github/workflows/elixir.yml and fly-io/Dockerfile
+#   - The Debian base image in fly-io/Dockerfile (same codename only)
+#   - esbuild and tailwind in config/config.exs (tailwind stays on its major)
+#   - daisyUI in assets/vendor/ (stays on its major)
+#
+# Only writes a version that every consumer can install: an Elixir/OTP pair is
+# picked only when builds.hex.pm has both builds (erlef/setup-beam and mise
+# install from there) and Docker Hub has a matching hexpm/elixir image.
+#
+# Usage: bin/bump-toolchain
+# Needs: gh (authenticated), curl, jq. Run by .github/workflows/toolchain-update.yml.
+
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+DOCKERFILE="fly-io/Dockerfile"
+CI_WORKFLOW=".github/workflows/elixir.yml"
+HEX_BUILDS="https://builds.hex.pm/builds"
+HEX_OTP_IMAGE="ubuntu-24.04"
+
+log() { echo "==> $1" >&2; }
+
+latest_release() {
+  gh api "repos/$1/releases/latest" --jq '.tag_name' | sed 's/^v//'
+}
+
+# Newest non-prerelease tag of repo $1 whose major version is $2.
+latest_release_in_major() {
+  gh api "repos/$1/releases?per_page=100" --paginate \
+    --jq ".[] | select(.prerelease | not) | .tag_name | ltrimstr(\"v\") | select(startswith(\"$2.\"))" |
+    sort -V | tail -1
+}
+
+docker_tags() {
+  curl -sf "https://hub.docker.com/v2/repositories/$1/tags?page_size=100&name=$2" | jq -r '.results[].name'
+}
+
+current_elixir=$(awk '$1 == "elixir" { sub(/-otp-.*/, "", $2); print $2 }' .tool-versions)
+current_otp=$(awk '$1 == "erlang" { print $2 }' .tool-versions)
+current_debian=$(sed -n 's/^ARG DEBIAN_VERSION=//p' "$DOCKERFILE")
+codename=${current_debian%%-*}
+
+# --- Elixir / Erlang / Debian ---
+
+elixir=$(latest_release elixir-lang/elixir)
+elixir_builds=$(curl -sf "$HEX_BUILDS/elixir/builds.txt" | awk '{ print $1 }')
+otp_builds=$(curl -sf "$HEX_BUILDS/otp/$HEX_OTP_IMAGE/builds.txt" | awk '{ print $1 }' | sed -n 's/^OTP-\([0-9][0-9.]*\)$/\1/p')
+
+otp=""
+debian=""
+for candidate in $(echo "$otp_builds" | sort -rV); do
+  # Never go backwards
+  [ "$(printf '%s\n%s\n' "$current_otp" "$candidate" | sort -V | head -1)" = "$current_otp" ] || break
+  major=${candidate%%.*}
+  echo "$elixir_builds" | grep -qx "v$elixir-otp-$major" || continue
+  tag=$(docker_tags hexpm/elixir "$elixir-erlang-$candidate-debian-$codename-" | grep -E -- "-debian-$codename-[0-9]{8}-slim$" | sort | tail -1 || true)
+  [ -n "$tag" ] || continue
+  docker_tags library/debian "${tag##*-debian-}" | grep -qx "${tag##*-debian-}" || continue
+  otp=$candidate
+  debian=${tag##*-debian-}
+  break
+done
+
+if [ -z "$otp" ]; then
+  log "No Elixir $elixir / OTP pair with hex.pm builds and a $codename image; keeping Elixir $current_elixir, OTP $current_otp"
+  elixir=$current_elixir
+  otp=$current_otp
+  debian=$current_debian
+fi
+
+otp_major=${otp%%.*}
+log "Elixir $current_elixir -> $elixir, OTP $current_otp -> $otp, Debian $current_debian -> $debian"
+
+sed -i.bak -E \
+  -e "s/^elixir .*/elixir $elixir-otp-$otp_major/" \
+  -e "s/^erlang .*/erlang $otp/" \
+  .tool-versions
+sed -i.bak -E \
+  -e "s/^(  OTP_VERSION_SPEC: ').*'/\1$otp'/" \
+  -e "s/^(  ELIXIR_VERSION_SPEC: ').*'/\1$elixir'/" \
+  "$CI_WORKFLOW"
+sed -i.bak -E \
+  -e "s/^ARG ELIXIR_VERSION=.*/ARG ELIXIR_VERSION=$elixir/" \
+  -e "s/^ARG OTP_VERSION=.*/ARG OTP_VERSION=$otp/" \
+  -e "s/^ARG DEBIAN_VERSION=.*/ARG DEBIAN_VERSION=$debian/" \
+  -e "s/$current_debian/$debian/g" \
+  -e "s/elixir:$current_elixir-erlang-$current_otp-/elixir:$elixir-erlang-$otp-/" \
+  "$DOCKERFILE"
+
+# --- esbuild / tailwind ---
+
+current_tailwind=$(sed -n '/^config :tailwind,/,/version:/ s/.*version: "\(.*\)".*/\1/p' config/config.exs)
+esbuild=$(latest_release evanw/esbuild)
+tailwind=$(latest_release_in_major tailwindlabs/tailwindcss "${current_tailwind%%.*}")
+log "esbuild -> $esbuild, tailwind $current_tailwind -> $tailwind"
+
+sed -i.bak \
+  -e "/^config :esbuild,/,/version:/ s/version: \".*\"/version: \"$esbuild\"/" \
+  -e "/^config :tailwind,/,/version:/ s/version: \".*\"/version: \"$tailwind\"/" \
+  config/config.exs
+
+# --- daisyUI ---
+
+current_daisyui=$(sed -n 's/.*version = "\([0-9][0-9.]*\)".*/\1/p' assets/vendor/daisyui.js | head -1)
+[ -n "$current_daisyui" ] || { log "Can't read the daisyUI version from assets/vendor/daisyui.js" && exit 1; }
+daisyui=$(latest_release_in_major saadeghi/daisyui "${current_daisyui%%.*}")
+log "daisyUI $current_daisyui -> $daisyui"
+if [ -n "$daisyui" ] && [ "$daisyui" != "$current_daisyui" ]; then
+  for file in daisyui.js daisyui-theme.js; do
+    curl -sfL -o "assets/vendor/$file" "https://github.com/saadeghi/daisyui/releases/download/v$daisyui/$file"
+  done
+fi
+
+rm -f .tool-versions.bak "$CI_WORKFLOW.bak" "$DOCKERFILE.bak" config/config.exs.bak

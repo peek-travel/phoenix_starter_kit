@@ -19,6 +19,7 @@ This is a **starter kit template** for building Elixir/Phoenix apps that integra
 - **Setup (deps + db + assets):** `make setup`
 - **Reset database:** `mix ecto.reset`
 - **Sync app manifest with registry:** `bin/sync`
+- **Bump Elixir/Erlang, Docker base image, esbuild, tailwind, daisyUI:** `bin/bump-toolchain` (mix deps and GitHub Actions are Dependabot's job; `.github/workflows/toolchain-update.yml` runs this weekly)
 
 ## Test Coverage
 

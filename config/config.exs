@@ -36,7 +36,7 @@ config :phoenix_starter_kit, PhoenixStarterKitWeb.Endpoint,
 
 # Configure esbuild (the version is required)
 config :esbuild,
-  version: "0.17.11",
+  version: "0.28.2",
   phoenix_starter_kit: [
     args: ~w(js/app.js --bundle --target=es2022 --outdir=../priv/static/assets/js --external:/fonts/* --external:/images/*),
     cd: Path.expand("../assets", __DIR__),
@@ -50,7 +50,7 @@ config :esbuild,
 
 # Configure tailwind (the version is required)
 config :tailwind,
-  version: "4.0.9",
+  version: "4.3.3",
   phoenix_starter_kit: [
     args: ~w(
       --input=assets/css/app.css
