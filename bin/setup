@@ -196,6 +196,13 @@ if [ -f ".github/dependabot.yml" ]; then
   rm .github/dependabot.yml
   print_success "Removed .github/dependabot.yml"
 fi
+# Toolchain bumps reach apps through the starter-kit-update backport instead
+for file in .github/workflows/toolchain-update.yml bin/bump-toolchain; do
+  if [ -f "$file" ]; then
+    rm "$file"
+    print_success "Removed $file"
+  fi
+done
 
 # Step 7: Set up git hooks with lefthook
 echo ""

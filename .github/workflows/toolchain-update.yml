@@ -1,0 +1,71 @@
+name: Toolchain Update
+
+# Opens (or refreshes) one PR that bumps the versions Dependabot can't see:
+# Elixir/Erlang, the Debian base image, esbuild, tailwind and daisyUI. The
+# work is in bin/bump-toolchain — run it locally to do the same by hand.
+#
+# Runs only in phoenix_starter_kit. Child repos get these bumps through the
+# normal starter-kit-update backport, so bin/setup removes this file there.
+#
+# Token: same priority as starter-kit-update.yml (APP_UPDATES_GH_TOKEN →
+# ACME_CI_GITHUB_TOKEN → GH_TOKEN). There is no fallback to the built-in
+# GITHUB_TOKEN — its pushes don't trigger Elixir CI, so the PR would never be
+# tested.
+
+on:
+  schedule:
+    - cron: "0 13 * * 2" # Tuesday, 13:00 UTC
+  workflow_dispatch:
+
+jobs:
+  update:
+    name: Bump toolchain versions
+    if: github.repository == 'peek-travel/phoenix_starter_kit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ secrets.APP_UPDATES_GH_TOKEN || secrets.ACME_CI_GITHUB_TOKEN || secrets.GH_TOKEN }}
+      HAS_BOT_TOKEN: ${{ secrets.APP_UPDATES_GH_TOKEN != '' || secrets.ACME_CI_GITHUB_TOKEN != '' || secrets.GH_TOKEN != '' }}
+      BASE_BRANCH: main
+      UPDATE_BRANCH: chore/toolchain-update
+    steps:
+      - name: Fail if no token is configured
+        run: |
+          if [ "$HAS_BOT_TOKEN" != "true" ]; then
+            echo "::error::None of APP_UPDATES_GH_TOKEN, ACME_CI_GITHUB_TOKEN, or GH_TOKEN is set. Set one to a bot PAT or GitHub App token with repo + workflow scope, then re-run."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ env.GH_TOKEN }}
+          ref: ${{ env.BASE_BRANCH }}
+
+      - name: Bump versions
+        run: bin/bump-toolchain
+
+      - name: Open or update the PR
+        run: |
+          if git diff --quiet; then
+            echo "Everything is up to date."
+            exit 0
+          fi
+
+          git config user.name "app-updates-bot"
+          git config user.email "app-updates-bot@users.noreply.github.com"
+          git switch -c "$UPDATE_BRANCH"
+          git commit -am "chore: bump toolchain versions"
+          git push --force origin "$UPDATE_BRANCH"
+
+          body=$(printf '%s\n\n```diff\n%s\n```\n' \
+            "Automated by .github/workflows/toolchain-update.yml (bin/bump-toolchain). Vendor files changed: $(git diff --name-only HEAD~1 -- assets/vendor | tr '\n' ' ')" \
+            "$(git diff HEAD~1 -- .tool-versions .github fly-io config)")
+
+          if gh pr view "$UPDATE_BRANCH" --json state --jq .state 2>/dev/null | grep -qx OPEN; then
+            gh pr edit "$UPDATE_BRANCH" --body "$body"
+          else
+            gh pr create --base "$BASE_BRANCH" --head "$UPDATE_BRANCH" --title "chore: bump toolchain versions" --body "$body"
+          fi
