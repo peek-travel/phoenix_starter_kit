@@ -4,11 +4,12 @@ on:
   push:
     branches:
       - '**'
+  # toolchain-update.yml dispatches this for its PR when it pushes with the
+  # built-in GITHUB_TOKEN, whose pushes don't trigger `push` workflows
+  workflow_dispatch:
 
 env:
   MIX_ENV: test
-  OTP_VERSION_SPEC: '29.1.2'
-  ELIXIR_VERSION_SPEC: '1.20.4'
 
   # Change either of these if you want to bust the cache:
   DEPS_CACHE_PREFIX: v4-
@@ -25,8 +26,8 @@ jobs:
       - uses: erlef/setup-beam@v1
         id: setup
         with:
-          otp-version: ${{ env.OTP_VERSION_SPEC }}
-          elixir-version: ${{ env.ELIXIR_VERSION_SPEC }}
+          version-file: .tool-versions
+          version-type: strict
       - name: Cache Keys
         id: keys
         run: |
@@ -68,8 +69,8 @@ jobs:
       - uses: erlef/setup-beam@v1
         id: setup
         with:
-          otp-version: ${{ env.OTP_VERSION_SPEC }}
-          elixir-version: ${{ env.ELIXIR_VERSION_SPEC }}
+          version-file: .tool-versions
+          version-type: strict
       - name: Cache Keys
         id: keys
         run: |
@@ -125,8 +126,8 @@ jobs:
       - uses: erlef/setup-beam@v1
         id: setup
         with:
-          otp-version: ${{ env.OTP_VERSION_SPEC }}
-          elixir-version: ${{ env.ELIXIR_VERSION_SPEC }}
+          version-file: .tool-versions
+          version-type: strict
       - name: Cache Keys
         id: keys
         run: |
@@ -181,8 +182,8 @@ jobs:
       - uses: erlef/setup-beam@v1
         id: setup
         with:
-          otp-version: ${{ env.OTP_VERSION_SPEC }}
-          elixir-version: ${{ env.ELIXIR_VERSION_SPEC }}
+          version-file: .tool-versions
+          version-type: strict
       - name: Cache Keys
         id: keys
         run: |
