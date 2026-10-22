@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Bumps the versions Dependabot can't see:
-#   - Elixir/Erlang in .tool-versions, .github/workflows/elixir.yml and fly-io/Dockerfile
+#   - Elixir/Erlang in .tool-versions (CI reads it) and fly-io/Dockerfile
 #   - The Debian base image in fly-io/Dockerfile (same codename only)
 #   - esbuild and tailwind in config/config.exs (tailwind stays on its major)
 #   - daisyUI in assets/vendor/ (stays on its major)
@@ -18,7 +18,6 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 DOCKERFILE="fly-io/Dockerfile"
-CI_WORKFLOW=".github/workflows/elixir.yml"
 HEX_BUILDS="https://builds.hex.pm/builds"
 HEX_OTP_IMAGE="ubuntu-24.04"
 
@@ -80,10 +79,6 @@ sed -i.bak -E \
   -e "s/^erlang .*/erlang $otp/" \
   .tool-versions
 sed -i.bak -E \
-  -e "s/^(  OTP_VERSION_SPEC: ').*'/\1$otp'/" \
-  -e "s/^(  ELIXIR_VERSION_SPEC: ').*'/\1$elixir'/" \
-  "$CI_WORKFLOW"
-sed -i.bak -E \
   -e "s/^ARG ELIXIR_VERSION=.*/ARG ELIXIR_VERSION=$elixir/" \
   -e "s/^ARG OTP_VERSION=.*/ARG OTP_VERSION=$otp/" \
   -e "s/^ARG DEBIAN_VERSION=.*/ARG DEBIAN_VERSION=$debian/" \
@@ -115,4 +110,4 @@ if [ -n "$daisyui" ] && [ "$daisyui" != "$current_daisyui" ]; then
   done
 fi
 
-rm -f .tool-versions.bak "$CI_WORKFLOW.bak" "$DOCKERFILE.bak" config/config.exs.bak
+rm -f .tool-versions.bak "$DOCKERFILE.bak" config/config.exs.bak
