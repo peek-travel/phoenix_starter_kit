@@ -39,10 +39,12 @@ jobs:
       BASE_BRANCH: main
       UPDATE_BRANCH: chore/toolchain-update
     steps:
+      # Checks out the triggering ref: main on the schedule. Dispatching on
+      # another branch (gh workflow run toolchain-update.yml --ref <branch>)
+      # tests that branch's bin/bump-toolchain as a dry run, see below.
       - uses: actions/checkout@v7
         with:
           token: ${{ env.GH_TOKEN }}
-          ref: ${{ env.BASE_BRANCH }}
 
       - name: Bump versions
         run: bin/bump-toolchain
@@ -51,6 +53,12 @@ jobs:
         run: |
           if git diff --quiet; then
             echo "Everything is up to date."
+            exit 0
+          fi
+
+          if [ "$GITHUB_REF_NAME" != "$BASE_BRANCH" ]; then
+            echo "Dry run on $GITHUB_REF_NAME, not opening a PR:"
+            git diff --stat
             exit 0
           fi
 

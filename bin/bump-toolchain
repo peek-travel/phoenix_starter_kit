@@ -34,8 +34,13 @@ latest_release_in_major() {
     sort -V | tail -1
 }
 
+# Fails (instead of printing nothing) when Docker Hub can't be reached, so a
+# rate limit or outage stops the run rather than looking like "no image yet".
 docker_tags() {
-  curl -sf "https://hub.docker.com/v2/repositories/$1/tags?page_size=100&name=$2" | jq -r '.results[].name'
+  local json
+  json=$(curl -sS --fail-with-body --retry 3 "https://hub.docker.com/v2/repositories/$1/tags?page_size=100&name=$2") ||
+    { log "Docker Hub request for $1 tags matching $2 failed: $json" && return 1; }
+  jq -r '.results[].name' <<<"$json"
 }
 
 current_elixir=$(awk '$1 == "elixir" { sub(/-otp-.*/, "", $2); print $2 }' .tool-versions)
@@ -55,10 +60,12 @@ for candidate in $(echo "$otp_builds" | sort -rV); do
   # Never go backwards
   [ "$(printf '%s\n%s\n' "$current_otp" "$candidate" | sort -V | head -1)" = "$current_otp" ] || break
   major=${candidate%%.*}
-  echo "$elixir_builds" | grep -qx "v$elixir-otp-$major" || continue
-  tag=$(docker_tags hexpm/elixir "$elixir-erlang-$candidate-debian-$codename-" | grep -E -- "-debian-$codename-[0-9]{8}-slim$" | sort | tail -1 || true)
-  [ -n "$tag" ] || continue
-  docker_tags library/debian "${tag##*-debian-}" | grep -qx "${tag##*-debian-}" || continue
+  grep -qx "v$elixir-otp-$major" <<<"$elixir_builds" || { log "OTP $candidate: no hex.pm build of Elixir $elixir-otp-$major" && continue; }
+  tags=$(docker_tags hexpm/elixir "$elixir-erlang-$candidate-debian-$codename-")
+  tag=$(grep -E -- "-debian-$codename-[0-9]{8}-slim$" <<<"$tags" | sort | tail -1 || true)
+  [ -n "$tag" ] || { log "OTP $candidate: no hexpm/elixir $elixir $codename slim image" && continue; }
+  runner_tags=$(docker_tags library/debian "${tag##*-debian-}")
+  grep -qx "${tag##*-debian-}" <<<"$runner_tags" || { log "OTP $candidate: no debian:${tag##*-debian-} image" && continue; }
   otp=$candidate
   debian=${tag##*-debian-}
   break
