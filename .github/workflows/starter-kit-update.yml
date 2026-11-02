@@ -353,7 +353,8 @@ jobs:
       # ticket that says what the update did. Runs before "Wait for checks"
       # and "Mark PR ready": Scout skips draft PRs, so its first real review
       # (on ready_for_review) already sees the key that enforce_jira_ticket
-      # needs.
+      # needs. When this step only warns (below), the title has no key and
+      # Scout asks for one.
       #
       # A plain step on purpose, never a Claude step: Claude reads untrusted
       # text in this job, so the Jira write token goes into this step's own
@@ -442,7 +443,8 @@ jobs:
           if [ "$HTTP_CODE" != "201" ] || ! [[ "$KEY" =~ ^DEV-[0-9]+$ ]]; then
             # Jira's error body names the fields and the reason; it does not
             # echo the credentials.
-            DETAIL=$(jq -c '{errorMessages, errors}' "$WORK/response.json" 2>/dev/null || head -c 500 "$WORK/response.json" 2>/dev/null || echo "no response body")
+            DETAIL=$(jq -c 'if type == "object" and (has("errorMessages") or has("errors")) then {errorMessages, errors} else . end' "$WORK/response.json" 2>/dev/null \
+              || head -c 500 "$WORK/response.json" 2>/dev/null || echo "no response body")
             NO_PROJECT_ACCESS=false
             if [ "$HTTP_CODE" = "400" ] && jq -e '.errors.project' "$WORK/response.json" > /dev/null 2>&1; then
               NO_PROJECT_ACCESS=true

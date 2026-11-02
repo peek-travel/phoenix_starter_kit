@@ -68,6 +68,7 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateJiraStepTest do
       lines = workflow_lines()
       names = Enum.filter(lines, &String.starts_with?(&1, "      - name: "))
       index = Enum.find_index(names, &(&1 == "      - name: #{@step_name}"))
+      assert index, "no step named #{inspect(@step_name)} in #{@workflow}"
 
       assert Enum.at(names, index - 1) == "      - name: Push branch and open draft PR"
       assert Enum.at(names, index + 1) == "      - name: Wait for checks, retry fixes on failure"
@@ -85,6 +86,23 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateJiraStepTest do
       assert length(String.split(workflow, "secrets.ACME_JIRA_SCOPED_TOKEN_WRITE_BASE64")) == 2
       assert length(String.split(workflow, "secrets.ACME_JIRA_SCOPED_TOKEN_WRITE_CLOUDID")) == 2
     end
+
+    test "maps the env that these tests set, and the script has no expressions" do
+      step = Enum.join(step_lines(), "\n")
+
+      for line <- [
+            "PR_URL: ${{ steps.pr.outputs.url }}",
+            "PR_TITLE: ${{ steps.pr.outputs.title }}",
+            "PR_NUMBER: ${{ steps.pr.outputs.number }}",
+            "REPO: ${{ github.repository }}",
+            "REPO_NAME: ${{ github.event.repository.name }}",
+            "SUMMARY_FILE: /tmp/starter-kit-update-summary.md"
+          ] do
+        assert step =~ "          " <> line
+      end
+
+      refute step_script() =~ "${{"
+    end
   end
 
   describe "missing secrets" do
@@ -92,6 +110,7 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateJiraStepTest do
       {out, 0} = run_step(ctx, JIRA_BASE64: "")
 
       assert out =~ "::warning::ACME_JIRA_SCOPED_TOKEN_WRITE_BASE64 or ACME_JIRA_SCOPED_TOKEN_WRITE_CLOUDID is not set"
+      refute out =~ "::error::"
       refute File.exists?(Path.join(ctx.dir, "curl-args"))
       refute File.exists?(Path.join(ctx.dir, "gh-calls"))
       assert File.read!(Path.join(ctx.dir, "output")) == ""
@@ -177,6 +196,8 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateJiraStepTest do
         {out, 0} = run_step(ctx, CURL_CODE: unquote(code), CURL_BODY: ~s({"code":#{unquote(code)},"message":"Unauthorized"}))
 
         assert out =~ "::warning::The token in ACME_JIRA_SCOPED_TOKEN_WRITE_BASE64 cannot create issues in DEV (HTTP #{unquote(code)})"
+        assert out =~ ~s("message":"Unauthorized")
+        refute out =~ "::error::"
         refute File.exists?(Path.join(ctx.dir, "gh-calls"))
         assert File.read!(Path.join(ctx.dir, "output")) == ""
       end
@@ -191,6 +212,7 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateJiraStepTest do
 
       assert out =~ "::warning::"
       assert out =~ "HTTP 400"
+      refute out =~ "::error::"
       refute File.exists?(Path.join(ctx.dir, "gh-calls"))
     end
   end
@@ -287,7 +309,10 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateJiraStepTest do
   defp step_lines do
     workflow_lines()
     |> Enum.drop_while(&(&1 != "      - name: #{@step_name}"))
-    |> then(fn [first | rest] -> [first | Enum.take_while(rest, &(not String.starts_with?(&1, "      - name: ")))] end)
+    |> case do
+      [first | rest] -> [first | Enum.take_while(rest, &(not String.starts_with?(&1, "      - name: ")))]
+      [] -> flunk("no step named #{inspect(@step_name)} in #{@workflow}")
+    end
   end
 
   # The `run: |` block, without its 10-space YAML indent.
