@@ -13,6 +13,9 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateJiraStepTest do
 
   @moduletag :tmp_dir
 
+  # A child repo that removed the workflow has nothing to test here.
+  unless File.exists?(@workflow), do: @moduletag(skip: "no #{@workflow} in this repo")
+
   # Records its arguments and the files it was given, then replies with
   # $CURL_CODE / $CURL_BODY (no body when $NO_BODY is set) and exits with
   # $CURL_RC.
