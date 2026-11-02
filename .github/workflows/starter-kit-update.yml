@@ -208,6 +208,8 @@ jobs:
 
       - name: Run starter-kit-update skill (backport)
         run: |
+          # CLAUDE_MODEL_ARGS stays unquoted on purpose: it holds zero or more flags.
+          # shellcheck disable=SC2086
           claude -p "Run steps 1 through 5 of the starter-kit-update skill (.claude/skills/starter-kit-update/SKILL.md) to backport the latest phoenix_starter_kit commits into this project. Stop after step 5 — do not run step 6 onward. A later step in this workflow re-syncs the Elixir toolchain (in case step 5 just bumped .tool-versions) and then a second Claude invocation continues from step 6.
 
           Overrides for this automated run:
@@ -238,6 +240,8 @@ jobs:
 
       - name: Run starter-kit-update skill (dependency + Docker image sweep)
         run: |
+          # CLAUDE_MODEL_ARGS stays unquoted on purpose: it holds zero or more flags.
+          # shellcheck disable=SC2086
           claude -p "Continue the starter-kit-update skill (.claude/skills/starter-kit-update/SKILL.md) from step 6 onward. A prior Claude invocation in this same workflow already completed steps 1-5 (the backport) on this branch — its notes are in /tmp/starter-kit-update-backport-notes.md if that file exists. The Elixir toolchain has just been re-synced to match this branch's current .tool-versions, so mix is safe to use now.
 
           Overrides for this automated run:
@@ -337,9 +341,11 @@ jobs:
             --title "$PR_TITLE" \
             --body-file "$BODY_FILE")
 
-          echo "had_changes=true" >> "$GITHUB_OUTPUT"
-          echo "url=$PR_URL" >> "$GITHUB_OUTPUT"
-          echo "number=$(gh pr view "$PR_URL" --json number --jq .number)" >> "$GITHUB_OUTPUT"
+          {
+            echo "had_changes=true"
+            echo "url=$PR_URL"
+            echo "number=$(gh pr view "$PR_URL" --json number --jq .number)"
+          } >> "$GITHUB_OUTPUT"
 
       # Compliance: every automatic update in a gadabout repo needs a Jira
       # ticket that says what the update did. Runs before "Wait for checks"
@@ -495,7 +501,7 @@ jobs:
           # the api_get permission error.
           wait_for_checks_to_register() {
             local sha="$1"
-            for i in $(seq 1 12); do
+            for _ in $(seq 1 12); do
               RUN_COUNT=$(api_get "repos/$REPO/commits/$sha/check-runs" --jq '.total_count')
               [ "$?" -eq 3 ] && return 3
               STATUS_COUNT=$(api_get "repos/$REPO/commits/$sha/status" --jq '.statuses | length')
@@ -596,11 +602,13 @@ jobs:
             # blob) so one run's tail doesn't crowd out another's when multiple
             # checks fail at once. Covers timed-out/action-required runs too,
             # not just outright failures.
+            # shellcheck disable=SC2016 # the sh -c script is single-quoted on purpose
             FAILED_LOGS=$(gh run list --branch "$BRANCH" --json databaseId,conclusion,headSha \
                 --jq --arg sha "$CURRENT_SHA" \
                   '.[] | select(.headSha==$sha and (.conclusion=="failure" or .conclusion=="timed_out" or .conclusion=="action_required")) | .databaseId' \
               | xargs -r -I{} sh -c 'gh run view "{}" --log-failed | tail -c 8000')
 
+            # shellcheck disable=SC2086 # CLAUDE_MODEL_ARGS: zero or more flags
             claude -p "PR #$PR (branch $BRANCH) has failing CI checks on commit $CURRENT_SHA.
 
           This branch was produced by the starter-kit-update skill, which besides backporting
