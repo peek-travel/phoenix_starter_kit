@@ -343,13 +343,16 @@ jobs:
 
           {
             echo "had_changes=true"
+            echo "title=$PR_TITLE"
             echo "url=$PR_URL"
             echo "number=$(gh pr view "$PR_URL" --json number --jq .number)"
           } >> "$GITHUB_OUTPUT"
 
       # Compliance: every automatic update in a gadabout repo needs a Jira
       # ticket that says what the update did. Runs before "Wait for checks"
-      # so Scout (enforce_jira_ticket) sees the key on its first pass.
+      # and "Mark PR ready": Scout skips draft PRs, so its first real review
+      # (on ready_for_review) already sees the key that enforce_jira_ticket
+      # needs.
       #
       # A plain step on purpose, never a Claude step: Claude reads untrusted
       # text in this job, so the Jira write token goes into this step's own
@@ -367,6 +370,7 @@ jobs:
           JIRA_BASE64: ${{ secrets.ACME_JIRA_SCOPED_TOKEN_WRITE_BASE64 }}
           JIRA_CLOUD_ID: ${{ secrets.ACME_JIRA_SCOPED_TOKEN_WRITE_CLOUDID }}
           PR_URL: ${{ steps.pr.outputs.url }}
+          PR_TITLE: ${{ steps.pr.outputs.title }}
           REPO_NAME: ${{ github.event.repository.name }}
           SUMMARY_FILE: /tmp/starter-kit-update-summary.md
         run: |
@@ -377,19 +381,20 @@ jobs:
             exit 1
           fi
 
-          PR_TITLE=$(gh pr view "$PR_URL" --json title --jq .title)
-
           WORK=$(mktemp -d)
           trap 'rm -rf "$WORK"' EXIT
           ( umask 077; printf 'Authorization: Basic %s\n' "$JIRA_BASE64" > "$WORK/auth-header" )
 
-          if [ -s "$SUMMARY_FILE" ]; then
+          # Claude wrote this file, so refuse a symlink: it could point at a
+          # file with secrets (.git/config holds the checkout token).
+          if [ -f "$SUMMARY_FILE" ] && [ ! -L "$SUMMARY_FILE" ] && [ -s "$SUMMARY_FILE" ]; then
             cp "$SUMMARY_FILE" "$WORK/summary.md"
           else
             echo "Automated update produced by the starter-kit-update skill. No summary file was written." > "$WORK/summary.md"
           fi
 
-          # Jira limits: summary 255 characters, description 32767. Only
+          # Jira limits: summary 255 characters, description 32767 (for the
+          # whole ADF document, so the text is cut well below that). Only
           # project, type, summary and description are set; the reporter is
           # the token's user.
           jq -n \
@@ -401,7 +406,7 @@ jobs:
                 issuetype: {name: "Technical Task"},
                 summary: $summary[0:255],
                 description: {type: "doc", version: 1, content: [
-                  {type: "codeBlock", attrs: {language: "markdown"}, content: [{type: "text", text: $text[0:30000]}]},
+                  {type: "codeBlock", attrs: {language: "markdown"}, content: [{type: "text", text: $text[0:20000]}]},
                   {type: "paragraph", content: [
                     {type: "text", text: "Pull request: "},
                     {type: "text", text: $url, marks: [{type: "link", attrs: {href: $url}}]}
