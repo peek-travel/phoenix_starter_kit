@@ -371,6 +371,8 @@ jobs:
           JIRA_CLOUD_ID: ${{ secrets.ACME_JIRA_SCOPED_TOKEN_WRITE_CLOUDID }}
           PR_URL: ${{ steps.pr.outputs.url }}
           PR_TITLE: ${{ steps.pr.outputs.title }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          REPO: ${{ github.repository }}
           REPO_NAME: ${{ github.event.repository.name }}
           SUMMARY_FILE: /tmp/starter-kit-update-summary.md
         run: |
@@ -448,7 +450,9 @@ jobs:
           else
             NEW_TITLE="$KEY $PR_TITLE"
           fi
-          if ! gh pr edit "$PR_URL" --title "$NEW_TITLE"; then
+          # REST, not `gh pr edit`: that one also queries org fields over
+          # GraphQL and fails for a classic PAT without read:org.
+          if ! gh api -X PATCH "repos/$REPO/pulls/$PR_NUMBER" -f title="$NEW_TITLE" --silent; then
             echo "::error::Created Jira ticket $KEY but could not add it to the title of $PR_URL. Set the title to '$NEW_TITLE' by hand. The PR stays in draft."
             exit 1
           fi
