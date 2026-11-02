@@ -39,8 +39,9 @@ name: Starter Kit Update
 #       DEV, in the same format as Scout's read-only pair: the _BASE64 value
 #       is the ready-made Basic auth credential, the _CLOUDID value builds
 #       the api.atlassian.com URL. For compliance, every update PR in a
-#       gadabout repo gets one DEV ticket (see "Create Jira ticket" below);
-#       the job fails there if these are missing. Other orgs need neither.
+#       gadabout repo gets one DEV ticket (see "Create Jira ticket" below).
+#       If they are missing, or the token cannot create issues in DEV, that
+#       step only warns and the job goes on. Other orgs need neither.
 #
 # No new secrets are needed for the dependency/Docker-image sweeps in the
 # skill (steps 6-7 of .claude/skills/starter-kit-update/SKILL.md) — they run
@@ -361,8 +362,12 @@ jobs:
       # through eval or a shell expansion. The token never goes on a command
       # line either — curl reads the auth header from a 0600 file.
       #
-      # On any failure the step exits non-zero, so "Wait for checks" and
-      # "Mark PR ready" are skipped and the PR stays in draft.
+      # Missing secrets, or a token that cannot create issues in DEV (HTTP
+      # 401/403, or 400 with a "project" error — Jira's reply when the user
+      # has no access to the project): a ::warning::, no ticket, and the job
+      # goes on. This lets the workflow ship before the secrets exist. Any
+      # other failure exits non-zero, so "Wait for checks" and "Mark PR
+      # ready" are skipped and the PR stays in draft.
       - name: Create Jira ticket (gadabout)
         id: jira
         if: github.repository_owner == 'gadabout' && steps.pr.outputs.had_changes == 'true'
@@ -382,9 +387,11 @@ jobs:
           # and the PR already exist), so say how to recover.
           RECOVERY="The PR stays in draft. To recover: close $PR_URL and run this workflow again, or create the DEV ticket and fix the PR by hand."
 
-          if [ -z "$JIRA_BASE64" ] || [ -z "$JIRA_CLOUD_ID" ]; then
-            echo "::error::ACME_JIRA_SCOPED_TOKEN_WRITE_BASE64 or ACME_JIRA_SCOPED_TOKEN_WRITE_CLOUDID is not set. A gadabout repo needs both (org-level secrets with write access to Jira project DEV) to create the compliance ticket for $PR_URL. $RECOVERY"
-            exit 1
+          NO_TICKET="No Jira ticket was made for $PR_URL. The job goes on; create the DEV ticket by hand and add its key to the PR title."
+
+          if [ -z "${JIRA_BASE64:-}" ] || [ -z "${JIRA_CLOUD_ID:-}" ]; then
+            echo "::warning::ACME_JIRA_SCOPED_TOKEN_WRITE_BASE64 or ACME_JIRA_SCOPED_TOKEN_WRITE_CLOUDID is not set. A gadabout repo needs both (org-level secrets with write access to Jira project DEV) for the compliance ticket. $NO_TICKET"
+            exit 0
           fi
 
           WORK=$(mktemp -d)
@@ -436,6 +443,14 @@ jobs:
             # Jira's error body names the fields and the reason; it does not
             # echo the credentials.
             DETAIL=$(jq -c '{errorMessages, errors}' "$WORK/response.json" 2>/dev/null || head -c 500 "$WORK/response.json" 2>/dev/null || echo "no response body")
+            NO_PROJECT_ACCESS=false
+            if [ "$HTTP_CODE" = "400" ] && jq -e '.errors.project' "$WORK/response.json" > /dev/null 2>&1; then
+              NO_PROJECT_ACCESS=true
+            fi
+            if [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "403" ] || [ "$NO_PROJECT_ACCESS" = "true" ]; then
+              echo "::warning::The token in ACME_JIRA_SCOPED_TOKEN_WRITE_BASE64 cannot create issues in DEV (HTTP $HTTP_CODE): $DETAIL. $NO_TICKET"
+              exit 0
+            fi
             echo "::error::Jira did not create the DEV ticket for $PR_URL (HTTP $HTTP_CODE): $DETAIL. Check that the token in ACME_JIRA_SCOPED_TOKEN_WRITE_BASE64 can create issues in DEV. $RECOVERY"
             exit 1
           fi
