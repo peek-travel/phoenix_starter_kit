@@ -33,6 +33,14 @@ name: Starter Kit Update
 #       secrets are set, the job fails outright instead (see "Fail if no
 #       token is configured" below).
 #   - Secret SLACK_WEBHOOK_URL           (optional — skips the Slack step if unset)
+#   - Secrets ACME_JIRA_SCOPED_TOKEN_WRITE_BASE64 and
+#     ACME_JIRA_SCOPED_TOKEN_WRITE_CLOUDID (gadabout repos only — org level)
+#       A scoped Atlassian API token that can create issues in Jira project
+#       DEV, in the same format as Scout's read-only pair: the _BASE64 value
+#       is the ready-made Basic auth credential, the _CLOUDID value builds
+#       the api.atlassian.com URL. For compliance, every update PR in a
+#       gadabout repo gets one DEV ticket (see "Create Jira ticket" below);
+#       the job fails there if these are missing. Other orgs need neither.
 #
 # No new secrets are needed for the dependency/Docker-image sweeps in the
 # skill (steps 6-7 of .claude/skills/starter-kit-update/SKILL.md) — they run
@@ -332,6 +340,103 @@ jobs:
           echo "had_changes=true" >> "$GITHUB_OUTPUT"
           echo "url=$PR_URL" >> "$GITHUB_OUTPUT"
           echo "number=$(gh pr view "$PR_URL" --json number --jq .number)" >> "$GITHUB_OUTPUT"
+
+      # Compliance: every automatic update in a gadabout repo needs a Jira
+      # ticket that says what the update did. Runs before "Wait for checks"
+      # so Scout (enforce_jira_ticket) sees the key on its first pass.
+      #
+      # A plain step on purpose, never a Claude step: Claude reads untrusted
+      # text in this job, so the Jira write token goes into this step's own
+      # env only, not the job env. The summary file was written by Claude,
+      # so it is treated as data: jq reads it with --rawfile, it never goes
+      # through eval or a shell expansion. The token never goes on a command
+      # line either — curl reads the auth header from a 0600 file.
+      #
+      # On any failure the step exits non-zero, so "Wait for checks" and
+      # "Mark PR ready" are skipped and the PR stays in draft.
+      - name: Create Jira ticket (gadabout)
+        id: jira
+        if: github.repository_owner == 'gadabout' && steps.pr.outputs.had_changes == 'true'
+        env:
+          JIRA_BASE64: ${{ secrets.ACME_JIRA_SCOPED_TOKEN_WRITE_BASE64 }}
+          JIRA_CLOUD_ID: ${{ secrets.ACME_JIRA_SCOPED_TOKEN_WRITE_CLOUDID }}
+          PR_URL: ${{ steps.pr.outputs.url }}
+          REPO_NAME: ${{ github.event.repository.name }}
+          SUMMARY_FILE: /tmp/starter-kit-update-summary.md
+        run: |
+          set -euo pipefail
+
+          if [ -z "$JIRA_BASE64" ] || [ -z "$JIRA_CLOUD_ID" ]; then
+            echo "::error::ACME_JIRA_SCOPED_TOKEN_WRITE_BASE64 or ACME_JIRA_SCOPED_TOKEN_WRITE_CLOUDID is not set. A gadabout repo needs both (org-level secrets with write access to Jira project DEV) to create the compliance ticket for $PR_URL. The PR stays in draft."
+            exit 1
+          fi
+
+          PR_TITLE=$(gh pr view "$PR_URL" --json title --jq .title)
+
+          WORK=$(mktemp -d)
+          trap 'rm -rf "$WORK"' EXIT
+          ( umask 077; printf 'Authorization: Basic %s\n' "$JIRA_BASE64" > "$WORK/auth-header" )
+
+          if [ -s "$SUMMARY_FILE" ]; then
+            cp "$SUMMARY_FILE" "$WORK/summary.md"
+          else
+            echo "Automated update produced by the starter-kit-update skill. No summary file was written." > "$WORK/summary.md"
+          fi
+
+          # Jira limits: summary 255 characters, description 32767. Only
+          # project, type, summary and description are set; the reporter is
+          # the token's user.
+          jq -n \
+            --arg summary "$REPO_NAME: $PR_TITLE" \
+            --arg url "$PR_URL" \
+            --rawfile text "$WORK/summary.md" \
+            '{fields: {
+                project: {key: "DEV"},
+                issuetype: {name: "Technical Task"},
+                summary: $summary[0:255],
+                description: {type: "doc", version: 1, content: [
+                  {type: "codeBlock", attrs: {language: "markdown"}, content: [{type: "text", text: $text[0:30000]}]},
+                  {type: "paragraph", content: [
+                    {type: "text", text: "Pull request: "},
+                    {type: "text", text: $url, marks: [{type: "link", attrs: {href: $url}}]}
+                  ]}
+                ]}
+              }}' > "$WORK/payload.json"
+
+          if ! HTTP_CODE=$(curl -sS --max-time 60 -o "$WORK/response.json" -w '%{http_code}' \
+              -X POST \
+              -H @"$WORK/auth-header" \
+              -H 'Content-Type: application/json' \
+              -H 'Accept: application/json' \
+              --data-binary @"$WORK/payload.json" \
+              "https://api.atlassian.com/ex/jira/$JIRA_CLOUD_ID/rest/api/3/issue"); then
+            echo "::error::The Jira create call for $PR_URL did not complete (network error or timeout). No ticket was made. The PR stays in draft."
+            exit 1
+          fi
+
+          KEY=$(jq -r '.key // empty' "$WORK/response.json" 2>/dev/null || true)
+          if [ "$HTTP_CODE" != "201" ] || ! [[ "$KEY" =~ ^DEV-[0-9]+$ ]]; then
+            # Jira's error body names the fields and the reason; it does not
+            # echo the credentials.
+            DETAIL=$(jq -c '{errorMessages, errors}' "$WORK/response.json" 2>/dev/null || head -c 500 "$WORK/response.json")
+            echo "::error::Jira did not create the DEV ticket for $PR_URL (HTTP $HTTP_CODE): $DETAIL. Check that the token in ACME_JIRA_SCOPED_TOKEN_WRITE_BASE64 can create issues in DEV. The PR stays in draft."
+            exit 1
+          fi
+          echo "key=$KEY" >> "$GITHUB_OUTPUT"
+          echo "Created Jira ticket $KEY: https://peeksters.atlassian.net/browse/$KEY"
+
+          # Scout finds any [A-Z][A-Z0-9]+-<n> in the title. Keep the
+          # conventional-commit type first ("chore: DEV-1 - ..."), since some
+          # child repos lint PR titles for it.
+          if [[ "$PR_TITLE" == *": "* ]]; then
+            NEW_TITLE="${PR_TITLE%%: *}: $KEY - ${PR_TITLE#*: }"
+          else
+            NEW_TITLE="$KEY $PR_TITLE"
+          fi
+          if ! gh pr edit "$PR_URL" --title "$NEW_TITLE"; then
+            echo "::error::Created Jira ticket $KEY but could not add it to the title of $PR_URL. Set the title to '$NEW_TITLE' by hand. The PR stays in draft."
+            exit 1
+          fi
 
       - name: Wait for checks, retry fixes on failure
         id: checks
