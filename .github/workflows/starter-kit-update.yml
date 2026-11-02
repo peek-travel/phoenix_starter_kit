@@ -376,8 +376,12 @@ jobs:
         run: |
           set -euo pipefail
 
+          # A re-run of this job cannot reach this step again (the branch
+          # and the PR already exist), so say how to recover.
+          RECOVERY="The PR stays in draft. To recover: close $PR_URL and run this workflow again, or create the DEV ticket and fix the PR by hand."
+
           if [ -z "$JIRA_BASE64" ] || [ -z "$JIRA_CLOUD_ID" ]; then
-            echo "::error::ACME_JIRA_SCOPED_TOKEN_WRITE_BASE64 or ACME_JIRA_SCOPED_TOKEN_WRITE_CLOUDID is not set. A gadabout repo needs both (org-level secrets with write access to Jira project DEV) to create the compliance ticket for $PR_URL. The PR stays in draft."
+            echo "::error::ACME_JIRA_SCOPED_TOKEN_WRITE_BASE64 or ACME_JIRA_SCOPED_TOKEN_WRITE_CLOUDID is not set. A gadabout repo needs both (org-level secrets with write access to Jira project DEV) to create the compliance ticket for $PR_URL. $RECOVERY"
             exit 1
           fi
 
@@ -421,7 +425,7 @@ jobs:
               -H 'Accept: application/json' \
               --data-binary @"$WORK/payload.json" \
               "https://api.atlassian.com/ex/jira/$JIRA_CLOUD_ID/rest/api/3/issue"); then
-            echo "::error::The Jira create call for $PR_URL did not complete (network error or timeout). No ticket was made. The PR stays in draft."
+            echo "::error::The Jira create call for $PR_URL did not complete (network error or timeout). No ticket was made. $RECOVERY"
             exit 1
           fi
 
@@ -429,8 +433,8 @@ jobs:
           if [ "$HTTP_CODE" != "201" ] || ! [[ "$KEY" =~ ^DEV-[0-9]+$ ]]; then
             # Jira's error body names the fields and the reason; it does not
             # echo the credentials.
-            DETAIL=$(jq -c '{errorMessages, errors}' "$WORK/response.json" 2>/dev/null || head -c 500 "$WORK/response.json")
-            echo "::error::Jira did not create the DEV ticket for $PR_URL (HTTP $HTTP_CODE): $DETAIL. Check that the token in ACME_JIRA_SCOPED_TOKEN_WRITE_BASE64 can create issues in DEV. The PR stays in draft."
+            DETAIL=$(jq -c '{errorMessages, errors}' "$WORK/response.json" 2>/dev/null || head -c 500 "$WORK/response.json" 2>/dev/null || echo "no response body")
+            echo "::error::Jira did not create the DEV ticket for $PR_URL (HTTP $HTTP_CODE): $DETAIL. Check that the token in ACME_JIRA_SCOPED_TOKEN_WRITE_BASE64 can create issues in DEV. $RECOVERY"
             exit 1
           fi
           echo "key=$KEY" >> "$GITHUB_OUTPUT"
