@@ -270,8 +270,15 @@ jobs:
           PENDING=".github/starter-kit-update-SKILL.pending.md"
           TARGET=".claude/skills/starter-kit-update/SKILL.md"
           if [ -f "$PENDING" ]; then
-            git mv -f "$PENDING" "$TARGET"
-            git commit -m "chore: land pending SKILL.md self-improvement"
+            # Claude may or may not have committed the pending file, so no
+            # `git mv` (it fails on an untracked file): move it, then stage
+            # both paths either way.
+            mv -f "$PENDING" "$TARGET"
+            git rm --cached --quiet --ignore-unmatch -- "$PENDING"
+            git add -- "$TARGET"
+            if ! git diff --cached --quiet; then
+              git commit -m "chore: land pending SKILL.md self-improvement"
+            fi
           fi
 
       - name: Push branch and open draft PR
