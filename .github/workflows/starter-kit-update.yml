@@ -476,7 +476,7 @@ jobs:
             exit 1
           fi
           echo "key=$KEY" >> "$GITHUB_OUTPUT"
-          echo "Created Jira ticket $KEY: https://peeksters.atlassian.net/browse/$KEY"
+          echo "Created Jira ticket $KEY."
 
           # Scout finds any [A-Z][A-Z0-9]+-<n> in the title. Keep the
           # conventional-commit type first ("chore: DEV-1 - ..."), since some
