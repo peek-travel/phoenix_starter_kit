@@ -33,6 +33,15 @@ name: Starter Kit Update
 #       secrets are set, the job fails outright instead (see "Fail if no
 #       token is configured" below).
 #   - Secret SLACK_WEBHOOK_URL           (optional — skips the Slack step if unset)
+#   - Secrets ACME_JIRA_SCOPED_TOKEN_WRITE_BASE64 and
+#     ACME_JIRA_SCOPED_TOKEN_WRITE_CLOUDID (gadabout repos only — org level)
+#       A scoped Atlassian API token that can create issues in Jira project
+#       DEV, in the same format as Scout's read-only pair: the _BASE64 value
+#       is the ready-made Basic auth credential, the _CLOUDID value builds
+#       the api.atlassian.com URL. For compliance, every update PR in a
+#       gadabout repo gets one DEV ticket (see "Create Jira ticket" below).
+#       If they are missing, or the token cannot create issues in DEV, that
+#       step only warns and the job goes on. Other orgs need neither.
 #
 # No new secrets are needed for the dependency/Docker-image sweeps in the
 # skill (steps 6-7 of .claude/skills/starter-kit-update/SKILL.md) — they run
@@ -200,6 +209,8 @@ jobs:
 
       - name: Run starter-kit-update skill (backport)
         run: |
+          # CLAUDE_MODEL_ARGS stays unquoted on purpose: it holds zero or more flags.
+          # shellcheck disable=SC2086
           claude -p "Run steps 1 through 5 of the starter-kit-update skill (.claude/skills/starter-kit-update/SKILL.md) to backport the latest phoenix_starter_kit commits into this project. Stop after step 5 — do not run step 6 onward. A later step in this workflow re-syncs the Elixir toolchain (in case step 5 just bumped .tool-versions) and then a second Claude invocation continues from step 6.
 
           Overrides for this automated run:
@@ -230,6 +241,8 @@ jobs:
 
       - name: Run starter-kit-update skill (dependency + Docker image sweep)
         run: |
+          # CLAUDE_MODEL_ARGS stays unquoted on purpose: it holds zero or more flags.
+          # shellcheck disable=SC2086
           claude -p "Continue the starter-kit-update skill (.claude/skills/starter-kit-update/SKILL.md) from step 6 onward. A prior Claude invocation in this same workflow already completed steps 1-5 (the backport) on this branch — its notes are in /tmp/starter-kit-update-backport-notes.md if that file exists. The Elixir toolchain has just been re-synced to match this branch's current .tool-versions, so mix is safe to use now.
 
           Overrides for this automated run:
@@ -257,8 +270,15 @@ jobs:
           PENDING=".github/starter-kit-update-SKILL.pending.md"
           TARGET=".claude/skills/starter-kit-update/SKILL.md"
           if [ -f "$PENDING" ]; then
-            git mv -f "$PENDING" "$TARGET"
-            git commit -m "chore: land pending SKILL.md self-improvement"
+            # Claude may or may not have committed the pending file, so no
+            # `git mv` (it fails on an untracked file): move it, then stage
+            # both paths either way.
+            mv -f "$PENDING" "$TARGET"
+            git rm --cached --quiet --ignore-unmatch -- "$PENDING"
+            git add -- "$TARGET"
+            if ! git diff --cached --quiet; then
+              git commit -m "chore: land pending SKILL.md self-improvement"
+            fi
           fi
 
       - name: Push branch and open draft PR
@@ -329,9 +349,137 @@ jobs:
             --title "$PR_TITLE" \
             --body-file "$BODY_FILE")
 
-          echo "had_changes=true" >> "$GITHUB_OUTPUT"
-          echo "url=$PR_URL" >> "$GITHUB_OUTPUT"
-          echo "number=$(gh pr view "$PR_URL" --json number --jq .number)" >> "$GITHUB_OUTPUT"
+          {
+            echo "had_changes=true"
+            echo "title=$PR_TITLE"
+            echo "url=$PR_URL"
+            echo "number=$(gh pr view "$PR_URL" --json number --jq .number)"
+          } >> "$GITHUB_OUTPUT"
+
+      # Compliance: every automatic update in a gadabout repo needs a Jira
+      # ticket that says what the update did. Runs before "Wait for checks"
+      # and "Mark PR ready": Scout skips draft PRs, so its first real review
+      # (on ready_for_review) already sees the key that enforce_jira_ticket
+      # needs. When this step only warns (below), the title has no key and
+      # Scout asks for one.
+      #
+      # A plain step on purpose, never a Claude step: Claude reads untrusted
+      # text in this job, so the Jira write token goes into this step's own
+      # env only, not the job env. The summary file was written by Claude,
+      # so it is treated as data: jq reads it with --rawfile, it never goes
+      # through eval or a shell expansion. The token never goes on a command
+      # line either — curl reads the auth header from a 0600 file.
+      #
+      # Missing secrets, or a token that cannot create issues in DEV (HTTP
+      # 401/403, or 400 with a "project" error — Jira's reply when the user
+      # has no access to the project): a ::warning::, no ticket, and the job
+      # goes on. This lets the workflow ship before the secrets exist. Any
+      # other failure exits non-zero, so "Wait for checks" and "Mark PR
+      # ready" are skipped and the PR stays in draft.
+      - name: Create Jira ticket (gadabout)
+        id: jira
+        if: github.repository_owner == 'gadabout' && steps.pr.outputs.had_changes == 'true'
+        env:
+          JIRA_BASE64: ${{ secrets.ACME_JIRA_SCOPED_TOKEN_WRITE_BASE64 }}
+          JIRA_CLOUD_ID: ${{ secrets.ACME_JIRA_SCOPED_TOKEN_WRITE_CLOUDID }}
+          PR_URL: ${{ steps.pr.outputs.url }}
+          PR_TITLE: ${{ steps.pr.outputs.title }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          REPO: ${{ github.repository }}
+          REPO_NAME: ${{ github.event.repository.name }}
+          SUMMARY_FILE: /tmp/starter-kit-update-summary.md
+        run: |
+          set -euo pipefail
+
+          # A re-run of this job cannot reach this step again (the branch
+          # and the PR already exist), so say how to recover.
+          RECOVERY="The PR stays in draft. To recover: close $PR_URL and run this workflow again, or create the DEV ticket and fix the PR by hand."
+
+          NO_TICKET="No Jira ticket was made for $PR_URL. The job goes on; create the DEV ticket by hand and add its key to the PR title."
+
+          if [ -z "${JIRA_BASE64:-}" ] || [ -z "${JIRA_CLOUD_ID:-}" ]; then
+            echo "::warning::ACME_JIRA_SCOPED_TOKEN_WRITE_BASE64 or ACME_JIRA_SCOPED_TOKEN_WRITE_CLOUDID is not set. A gadabout repo needs both (org-level secrets with write access to Jira project DEV) for the compliance ticket. $NO_TICKET"
+            exit 0
+          fi
+
+          WORK=$(mktemp -d)
+          trap 'rm -rf "$WORK"' EXIT
+          ( umask 077; printf 'Authorization: Basic %s\n' "$JIRA_BASE64" > "$WORK/auth-header" )
+
+          # Claude wrote this file, so refuse a symlink: it could point at a
+          # file with secrets (.git/config holds the checkout token).
+          if [ -f "$SUMMARY_FILE" ] && [ ! -L "$SUMMARY_FILE" ] && [ -s "$SUMMARY_FILE" ]; then
+            cp "$SUMMARY_FILE" "$WORK/summary.md"
+          else
+            echo "Automated update produced by the starter-kit-update skill. No summary file was written." > "$WORK/summary.md"
+          fi
+
+          # Jira limits: summary 255 characters, description 32767 (for the
+          # whole ADF document, so the text is cut well below that). Only
+          # project, type, summary and description are set; the reporter is
+          # the token's user.
+          jq -n \
+            --arg summary "$REPO_NAME: $PR_TITLE" \
+            --arg url "$PR_URL" \
+            --rawfile text "$WORK/summary.md" \
+            '{fields: {
+                project: {key: "DEV"},
+                issuetype: {name: "Technical Task"},
+                summary: $summary[0:255],
+                description: {type: "doc", version: 1, content: [
+                  {type: "codeBlock", attrs: {language: "markdown"}, content: [{type: "text", text: $text[0:20000]}]},
+                  {type: "paragraph", content: [
+                    {type: "text", text: "Pull request: "},
+                    {type: "text", text: $url, marks: [{type: "link", attrs: {href: $url}}]}
+                  ]}
+                ]}
+              }}' > "$WORK/payload.json"
+
+          if ! HTTP_CODE=$(curl -sS --max-time 60 -o "$WORK/response.json" -w '%{http_code}' \
+              -X POST \
+              -H @"$WORK/auth-header" \
+              -H 'Content-Type: application/json' \
+              -H 'Accept: application/json' \
+              --data-binary @"$WORK/payload.json" \
+              "https://api.atlassian.com/ex/jira/$JIRA_CLOUD_ID/rest/api/3/issue"); then
+            echo "::error::The Jira create call for $PR_URL did not complete (network error or timeout). No ticket was made. $RECOVERY"
+            exit 1
+          fi
+
+          KEY=$(jq -r '.key // empty' "$WORK/response.json" 2>/dev/null || true)
+          if [ "$HTTP_CODE" != "201" ] || ! [[ "$KEY" =~ ^DEV-[0-9]+$ ]]; then
+            # Jira's error body names the fields and the reason; it does not
+            # echo the credentials.
+            DETAIL=$(jq -c 'if type == "object" and (has("errorMessages") or has("errors")) then {errorMessages, errors} else . end' "$WORK/response.json" 2>/dev/null \
+              || head -c 500 "$WORK/response.json" 2>/dev/null || echo "no response body")
+            NO_PROJECT_ACCESS=false
+            if [ "$HTTP_CODE" = "400" ] && jq -e '.errors.project' "$WORK/response.json" > /dev/null 2>&1; then
+              NO_PROJECT_ACCESS=true
+            fi
+            if [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "403" ] || [ "$NO_PROJECT_ACCESS" = "true" ]; then
+              echo "::warning::The token in ACME_JIRA_SCOPED_TOKEN_WRITE_BASE64 cannot create issues in DEV (HTTP $HTTP_CODE): $DETAIL. $NO_TICKET"
+              exit 0
+            fi
+            echo "::error::Jira did not create the DEV ticket for $PR_URL (HTTP $HTTP_CODE): $DETAIL. Check that the token in ACME_JIRA_SCOPED_TOKEN_WRITE_BASE64 can create issues in DEV. $RECOVERY"
+            exit 1
+          fi
+          echo "key=$KEY" >> "$GITHUB_OUTPUT"
+          echo "Created Jira ticket $KEY: https://peeksters.atlassian.net/browse/$KEY"
+
+          # Scout finds any [A-Z][A-Z0-9]+-<n> in the title. Keep the
+          # conventional-commit type first ("chore: DEV-1 - ..."), since some
+          # child repos lint PR titles for it.
+          if [[ "$PR_TITLE" == *": "* ]]; then
+            NEW_TITLE="${PR_TITLE%%: *}: $KEY - ${PR_TITLE#*: }"
+          else
+            NEW_TITLE="$KEY $PR_TITLE"
+          fi
+          # REST, not `gh pr edit`: that one also queries org fields over
+          # GraphQL and fails for a classic PAT without read:org.
+          if ! gh api -X PATCH "repos/$REPO/pulls/$PR_NUMBER" -f title="$NEW_TITLE" --silent; then
+            echo "::error::Created Jira ticket $KEY but could not add it to the title of $PR_URL. Set the title to '$NEW_TITLE' by hand. The PR stays in draft."
+            exit 1
+          fi
 
       - name: Wait for checks, retry fixes on failure
         id: checks
@@ -390,7 +538,7 @@ jobs:
           # the api_get permission error.
           wait_for_checks_to_register() {
             local sha="$1"
-            for i in $(seq 1 12); do
+            for _ in $(seq 1 12); do
               RUN_COUNT=$(api_get "repos/$REPO/commits/$sha/check-runs" --jq '.total_count')
               [ "$?" -eq 3 ] && return 3
               STATUS_COUNT=$(api_get "repos/$REPO/commits/$sha/status" --jq '.statuses | length')
@@ -491,11 +639,13 @@ jobs:
             # blob) so one run's tail doesn't crowd out another's when multiple
             # checks fail at once. Covers timed-out/action-required runs too,
             # not just outright failures.
+            # shellcheck disable=SC2016 # the sh -c script is single-quoted on purpose
             FAILED_LOGS=$(gh run list --branch "$BRANCH" --json databaseId,conclusion,headSha \
                 --jq --arg sha "$CURRENT_SHA" \
                   '.[] | select(.headSha==$sha and (.conclusion=="failure" or .conclusion=="timed_out" or .conclusion=="action_required")) | .databaseId' \
               | xargs -r -I{} sh -c 'gh run view "{}" --log-failed | tail -c 8000')
 
+            # shellcheck disable=SC2086 # CLAUDE_MODEL_ARGS: zero or more flags
             claude -p "PR #$PR (branch $BRANCH) has failing CI checks on commit $CURRENT_SHA.
 
           This branch was produced by the starter-kit-update skill, which besides backporting
