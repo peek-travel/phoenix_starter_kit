@@ -32,6 +32,10 @@ name: Starter Kit Update
 #       degrade into a PR that never leaves draft. If none of the three
 #       secrets are set, the job fails outright instead (see "Fail if no
 #       token is configured" below).
+#       The bot token does not need to read CI results. The "Wait for
+#       checks" step reads them with the built-in GITHUB_TOKEN, with the
+#       access from the job's `permissions:` block (actions, checks and
+#       statuses: read). A fine-grained token has no Checks permission.
 #   - Secret SLACK_WEBHOOK_URL           (optional — skips the Slack step if unset)
 #   - Secrets ACME_JIRA_SCOPED_TOKEN_WRITE_BASE64 and
 #     ACME_JIRA_SCOPED_TOKEN_WRITE_CLOUDID (gadabout repos only — org level)
@@ -60,11 +64,19 @@ jobs:
     if: github.repository != 'peek-travel/phoenix_starter_kit'
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # Read-only on purpose. These permissions are for the built-in
+    # GITHUB_TOKEN, and no step writes with it: checkout, every push, the
+    # PR and `gh pr ready` use the bot token (GH_TOKEN below). Only the
+    # "Wait for checks" step uses the built-in token, to read CI results
+    # (check runs, commit statuses, workflow runs and their logs). Claude
+    # runs in that step and reads untrusted text, so the token must not
+    # be able to write.
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
+      pull-requests: read
       actions: read
       checks: read
+      statuses: read
     env:
       # Single source of truth for which token this job uses everywhere
       # (checkout via `env.GH_TOKEN` below, plus every `gh`/git push, which
@@ -481,9 +493,27 @@ jobs:
             exit 1
           fi
 
+      # Reads CI results with the built-in GITHUB_TOKEN, not the bot token.
+      # A fine-grained token has no Checks permission, so it gets HTTP 403
+      # on the check-runs endpoint. The built-in token gets its read access
+      # from the job's `permissions:` block. The bot token still does every
+      # write: the fix push (only a bot push starts this repo's CI) and,
+      # in the next step, `gh pr ready`.
+      #
+      # Claude reads untrusted text (CI logs) in this step. So the token is
+      # in this step's env only, and the script moves it into a shell
+      # variable that is not exported before anything else runs: `claude
+      # -p` does not get it in its env. Only gh_read gives it to `gh`, one
+      # call at a time. A process of the same user can still read it from
+      # /proc, so the job's `permissions:` block keeps it read-only.
       - name: Wait for checks, retry fixes on failure
         id: checks
         if: steps.pr.outputs.had_changes == 'true'
+        env:
+          CHECKS_READ_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ steps.pr.outputs.number }}
+          BRANCH: ${{ steps.branch.outputs.name }}
+          REPO: ${{ github.repository }}
         run: |
           # Disabled on purpose: this loop must always reach the final
           # `echo status=...` line, even if a transient `gh`/`git` call
@@ -492,26 +522,25 @@ jobs:
           # both Slack notifications below.
           set +e
 
-          PR="${{ steps.pr.outputs.number }}"
-          BRANCH="${{ steps.branch.outputs.name }}"
-          REPO="${{ github.repository }}"
+          READ_TOKEN="$CHECKS_READ_TOKEN"
+          unset CHECKS_READ_TOKEN
           ATTEMPT=0
           FINAL_STATUS="unknown"
 
-          # Calls `gh api` and prints the response. Returns 3 when the token
-          # gets HTTP 403 "Resource not accessible by personal access token"
-          # (or "... by integration") — a token without "Checks: read" /
-          # "Commit statuses: read". Retrying can't fix that, and counting it
-          # as a CI failure sends a false "needs a human" alert while CI is
+          # Runs `gh` with the read token and prints its output. Returns 3
+          # when the token is refused: HTTP 401, or HTTP 403 "Resource not
+          # accessible by ..." (the permissions: block is missing a read
+          # permission). Retrying can't fix that, and counting it as a CI
+          # failure sends a false "needs a human" alert while CI is
           # actually green. A rate-limit 403 has another message and returns
           # 1 like any other failure, so callers retry it. stderr stays
-          # hidden (as before) except for the permission error.
-          api_get() {
+          # hidden except for the refusal.
+          gh_read() {
             local err rc
             err=$(mktemp)
-            gh api "$@" 2>"$err"
+            GH_TOKEN="$READ_TOKEN" gh "$@" 2>"$err"
             rc=$?
-            if [ "$rc" -ne 0 ] && grep -q 'HTTP 403' "$err" && grep -q 'Resource not accessible' "$err"; then
+            if [ "$rc" -ne 0 ] && { grep -q 'HTTP 401' "$err" || { grep -q 'HTTP 403' "$err" && grep -q 'Resource not accessible' "$err"; }; }; then
               cat "$err" >&2
               rc=3
             fi
@@ -520,14 +549,9 @@ jobs:
           }
 
           # Polls the REST check-runs/commit-status endpoints instead of
-          # `gh pr checks --watch`. `gh pr checks` goes through GraphQL's
-          # `statusCheckRollup` field, which some PATs (older classic
-          # tokens without every fine-grained scope, or newer fine-grained
-          # tokens missing "Checks") can't query — it fails with a GraphQL
-          # "Resource not accessible by personal access token" error. The
-          # REST endpoints below need only the same repo-read access
-          # already required to see CI results at all, so they work
-          # regardless of which kind of token is configured.
+          # `gh pr checks --watch`, which goes through GraphQL's
+          # `statusCheckRollup` field. The REST endpoints need `checks: read`
+          # and `statuses: read` from the permissions: block.
           # Returns 1 (not just falling through) if the budget expires with
           # zero checks ever registered — a caller that ignores this and
           # polls anyway would see two empty arrays, compute PENDING=0 /
@@ -535,13 +559,13 @@ jobs:
           # silent degradation the fail-fast token step earlier in this job
           # exists to prevent (a push that never triggered CI would then
           # yield a green-looking PR instead of a clear error). Returns 3 on
-          # the api_get permission error.
+          # the gh_read refusal.
           wait_for_checks_to_register() {
             local sha="$1"
             for _ in $(seq 1 12); do
-              RUN_COUNT=$(api_get "repos/$REPO/commits/$sha/check-runs" --jq '.total_count')
+              RUN_COUNT=$(gh_read api "repos/$REPO/commits/$sha/check-runs" --jq '.total_count')
               [ "$?" -eq 3 ] && return 3
-              STATUS_COUNT=$(api_get "repos/$REPO/commits/$sha/status" --jq '.statuses | length')
+              STATUS_COUNT=$(gh_read api "repos/$REPO/commits/$sha/status" --jq '.statuses | length')
               [ "$?" -eq 3 ] && return 3
               if [ "${RUN_COUNT:-0}" -gt 0 ] || [ "${STATUS_COUNT:-0}" -gt 0 ]; then
                 return 0
@@ -562,14 +586,14 @@ jobs:
             local sha="$1"
             local rc
             while true; do
-              RUNS=$(api_get "repos/$REPO/commits/$sha/check-runs" --jq '.check_runs')
+              RUNS=$(gh_read api "repos/$REPO/commits/$sha/check-runs" --jq '.check_runs')
               rc=$?
               [ "$rc" -eq 3 ] && return 3
               if [ "$rc" -ne 0 ]; then
                 sleep 30
                 continue
               fi
-              STATUSES=$(api_get "repos/$REPO/commits/$sha/status" --jq '.statuses')
+              STATUSES=$(gh_read api "repos/$REPO/commits/$sha/status" --jq '.statuses')
               rc=$?
               [ "$rc" -eq 3 ] && return 3
               if [ "$rc" -ne 0 ]; then
@@ -593,7 +617,7 @@ jobs:
           # Sets FINAL_STATUS to its own value so neither the "failed" Slack
           # alert nor "Mark PR ready" runs, and the step fails at the end.
           token_forbidden() {
-            echo "::error::The GitHub token cannot read CI results for $1 (HTTP 403: Resource not accessible by personal access token). This is a token permission problem, not a CI failure — CI may be green. Give the token used by this workflow (APP_UPDATES_GH_TOKEN, ACME_CI_GITHUB_TOKEN or GH_TOKEN) read access to Checks and Commit statuses, then re-run. PR #$PR stays in draft until then."
+            echo "::error::The built-in GITHUB_TOKEN cannot read CI results for $1 (HTTP 401 or 403). This is a token permission problem, not a CI failure — CI may be green. Make sure the permissions: block of this workflow's job has actions: read, checks: read and statuses: read, and that the repo or org settings do not limit the GITHUB_TOKEN below that. Then re-run. PR #$PR stays in draft until then."
             FINAL_STATUS="token_forbidden"
           }
 
@@ -638,12 +662,21 @@ jobs:
             # Truncate each failing run's log individually (not the concatenated
             # blob) so one run's tail doesn't crowd out another's when multiple
             # checks fail at once. Covers timed-out/action-required runs too,
-            # not just outright failures.
-            # shellcheck disable=SC2016 # the sh -c script is single-quoted on purpose
-            FAILED_LOGS=$(gh run list --branch "$BRANCH" --json databaseId,conclusion,headSha \
+            # not just outright failures. A loop, not `xargs sh -c`: the child
+            # shell would not see READ_TOKEN. A refused read stops the job,
+            # the same as in poll_checks.
+            # shellcheck disable=SC2016 # $sha is a jq variable, not a shell one
+            RUN_IDS=$(gh_read run list --branch "$BRANCH" --json databaseId,conclusion,headSha \
                 --jq --arg sha "$CURRENT_SHA" \
-                  '.[] | select(.headSha==$sha and (.conclusion=="failure" or .conclusion=="timed_out" or .conclusion=="action_required")) | .databaseId' \
-              | xargs -r -I{} sh -c 'gh run view "{}" --log-failed | tail -c 8000')
+                  '.[] | select(.headSha==$sha and (.conclusion=="failure" or .conclusion=="timed_out" or .conclusion=="action_required")) | .databaseId')
+            [ "$?" -eq 3 ] && token_forbidden "$CURRENT_SHA" && break
+            FAILED_LOGS=""
+            for RUN_ID in $RUN_IDS; do
+              RUN_LOG=$(gh_read run view "$RUN_ID" --log-failed)
+              [ "$?" -eq 3 ] && token_forbidden "$CURRENT_SHA" && break
+              FAILED_LOGS+="$(printf '%s' "$RUN_LOG" | tail -c 8000)"$'\n'
+            done
+            [ "$FINAL_STATUS" = "token_forbidden" ] && break
 
             # shellcheck disable=SC2086 # CLAUDE_MODEL_ARGS: zero or more flags
             claude -p "PR #$PR (branch $BRANCH) has failing CI checks on commit $CURRENT_SHA.
