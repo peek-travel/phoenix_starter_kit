@@ -35,7 +35,10 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateChecksStepTest do
     "api "*check-runs*) echo "[{\"status\":\"completed\",\"conclusion\":\"$conclusion\"}]" ;;
     "api "*"statuses | length"*) echo 0 ;;
     "api "*status*) echo "[]" ;;
-    "run list"*) echo 101 ;;
+    "run list"*)
+      if [ -n "$NO_RUNS" ]; then echo "[]"; else
+        echo '[{"databaseId":101,"conclusion":"failure","headSha":"abc123"},{"databaseId":102,"conclusion":"failure","headSha":"older"},{"databaseId":103,"conclusion":"success","headSha":"abc123"}]'
+      fi ;;
     "run view"*) echo "log of run $3" ;;
   esac
   """
@@ -43,16 +46,19 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateChecksStepTest do
   @git_stub ~S"""
   #!/usr/bin/env bash
   printf '%s %s\n' "$GH_TOKEN" "$*" >> "$STUB_DIR/git-calls"
-  [ "$1" = "rev-parse" ] && echo abc123
+  if [ "$1" = "rev-parse" ]; then
+    if [ -e "$STUB_DIR/fixed" ]; then echo def456; else echo abc123; fi
+  fi
   exit 0
   """
 
-  # Saves its whole env and its prompt, then "fixes" CI.
+  # Saves its whole env and its prompt, then "fixes" CI and commits, except
+  # when $NO_COMMIT is set.
   @claude_stub ~S"""
   #!/usr/bin/env bash
   env > "$STUB_DIR/claude-env"
   printf '%s' "$2" > "$STUB_DIR/claude-prompt"
-  touch "$STUB_DIR/fixed"
+  [ -n "$NO_COMMIT" ] || touch "$STUB_DIR/fixed"
   """
 
   setup %{tmp_dir: dir} do
@@ -186,6 +192,9 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateChecksStepTest do
       assert Enum.all?(gh_calls(ctx), &String.starts_with?(&1, @read_token <> " "))
       assert Enum.any?(gh_calls(ctx), &String.starts_with?(&1, @read_token <> " run list --branch chore/update-1 "))
       assert "#{@read_token} run view 101 --log-failed" in gh_calls(ctx)
+      assert "#{@read_token} run list --branch chore/update-1 --limit 100 --json databaseId,conclusion,headSha" in gh_calls(ctx)
+      refute Enum.any?(gh_calls(ctx), &(&1 =~ "run view 102"))
+      refute Enum.any?(gh_calls(ctx), &(&1 =~ "run view 103"))
 
       assert File.read!(Path.join(ctx.dir, "claude-prompt")) =~ "<ci_log>\nlog of run 101\n"
 
@@ -194,6 +203,24 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateChecksStepTest do
       refute claude_env =~ "CHECKS_READ_TOKEN"
 
       assert "#{@bot_token} push" in git_calls(ctx)
+    end
+
+    test "skips the fix attempt when no failure log exists, so claude does not guess", ctx do
+      {out, 0} = run_step(ctx, FAIL_FIRST: "1", NO_RUNS: "1")
+
+      assert read_output(ctx) == "status=failed\n"
+      assert out =~ "::error::Checks failed on abc123 but no failure log could be retrieved"
+      refute File.exists?(Path.join(ctx.dir, "claude-env"))
+      refute "#{@bot_token} push" in git_calls(ctx)
+    end
+
+    test "stops when the fix attempt makes no commit, because nothing new can be tested", ctx do
+      {out, 0} = run_step(ctx, FAIL_FIRST: "1", NO_COMMIT: "1")
+
+      assert read_output(ctx) == "status=failed\n"
+      assert out =~ "::error::Fix attempt 1 made no commit"
+      assert File.exists?(Path.join(ctx.dir, "claude-env"))
+      refute "#{@bot_token} push" in git_calls(ctx)
     end
 
     test "reports failed after the last fix attempt", ctx do
@@ -223,7 +250,9 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateChecksStepTest do
         GH_DENY_ERR: "",
         GH_DENY_ON: "",
         GH_FIRST_ERR: "",
-        FAIL_FIRST: ""
+        FAIL_FIRST: "",
+        NO_RUNS: "",
+        NO_COMMIT: ""
       ]
       |> Keyword.merge(overrides)
       |> Enum.map(fn {key, value} -> {Atom.to_string(key), value} end)
