@@ -18,12 +18,13 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateChecksStepTest do
   unless File.exists?(@workflow), do: @moduletag(skip: "no #{@workflow} in this repo")
 
   # Records each call with its GH_TOKEN. Fails with $GH_DENY_ERR when it is
-  # set, and with $GH_FIRST_ERR on the first call only. Check runs fail
+  # set and "$1 $2" matches the $GH_DENY_ON pattern (all calls by default),
+  # and with $GH_FIRST_ERR on the first call only. Check runs fail
   # until `claude` made the fix (the "fixed" file), when $FAIL_FIRST is set.
   @gh_stub ~S"""
   #!/usr/bin/env bash
   printf '%s %s\n' "$GH_TOKEN" "$*" >> "$STUB_DIR/gh-calls"
-  if [ -n "$GH_DENY_ERR" ]; then echo "$GH_DENY_ERR" >&2; exit 1; fi
+  if [ -n "$GH_DENY_ERR" ] && [[ "$1 $2" == ${GH_DENY_ON:-*} ]]; then echo "$GH_DENY_ERR" >&2; exit 1; fi
   if [ -n "$GH_FIRST_ERR" ] && [ ! -e "$STUB_DIR/first-err-done" ]; then
     touch "$STUB_DIR/first-err-done"; echo "$GH_FIRST_ERR" >&2; exit 1
   fi
@@ -71,16 +72,21 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateChecksStepTest do
   end
 
   describe "the step definition" do
-    test "the job grants the built-in token read access to actions, checks and statuses" do
+    test "the job gives the built-in token read access only: actions, checks, statuses, contents and PRs" do
       permissions =
         workflow_lines()
         |> Enum.drop_while(&(&1 != "    permissions:"))
         |> Enum.drop(1)
         |> Enum.take_while(&String.starts_with?(&1, "      "))
 
-      for line <- ["      actions: read", "      checks: read", "      statuses: read"] do
-        assert line in permissions
-      end
+      assert Enum.sort(permissions) ==
+               Enum.sort([
+                 "      actions: read",
+                 "      checks: read",
+                 "      statuses: read",
+                 "      contents: read",
+                 "      pull-requests: read"
+               ])
     end
 
     test "only this step gets the built-in token, so the job env and the other steps do not" do
@@ -113,8 +119,9 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateChecksStepTest do
       assert calls == [~s(  GH_TOKEN="$READ_TOKEN" gh "$@" 2>"$err")]
     end
 
-    test "Mark PR ready and the pushes keep the bot token" do
+    test "no step overrides the bot token, so checkout, the pushes and Mark PR ready use it" do
       assert "        run: gh pr ready \"${{ steps.pr.outputs.number }}\"" in workflow_lines()
+      assert "          token: ${{ env.GH_TOKEN }}" in workflow_lines()
       assert workflow_lines() |> Enum.filter(&(&1 =~ "GH_TOKEN: ")) |> length() == 1
       assert "      GH_TOKEN: ${{ secrets.APP_UPDATES_GH_TOKEN || secrets.ACME_CI_GITHUB_TOKEN || secrets.GH_TOKEN }}" in workflow_lines()
     end
@@ -157,6 +164,18 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateChecksStepTest do
         refute File.exists?(Path.join(ctx.dir, "claude-env"))
       end
     end
+
+    for cmd <- ["run list", "run view"] do
+      test "on `gh #{cmd}` stops the job before claude runs", ctx do
+        err = "gh: Resource not accessible by integration (HTTP 403)"
+        {out, 1} = run_step(ctx, FAIL_FIRST: "1", GH_DENY_ERR: err, GH_DENY_ON: unquote(cmd))
+
+        assert read_output(ctx) == "status=token_forbidden\n"
+        assert out =~ "::error::The built-in GITHUB_TOKEN cannot read CI results for abc123"
+        refute File.exists?(Path.join(ctx.dir, "claude-env"))
+        refute "#{@bot_token} push" in git_calls(ctx)
+      end
+    end
   end
 
   describe "failed CI" do
@@ -168,7 +187,7 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateChecksStepTest do
       assert Enum.any?(gh_calls(ctx), &String.starts_with?(&1, @read_token <> " run list --branch chore/update-1 "))
       assert "#{@read_token} run view 101 --log-failed" in gh_calls(ctx)
 
-      assert File.read!(Path.join(ctx.dir, "claude-prompt")) =~ "<ci_log>\nlog of run 101\n</ci_log>"
+      assert File.read!(Path.join(ctx.dir, "claude-prompt")) =~ "<ci_log>\nlog of run 101\n"
 
       claude_env = File.read!(Path.join(ctx.dir, "claude-env"))
       refute claude_env =~ @read_token
@@ -202,6 +221,7 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateChecksStepTest do
         CLAUDE_ALLOWED_TOOLS: "Read",
         CLAUDE_MODEL_ARGS: "",
         GH_DENY_ERR: "",
+        GH_DENY_ON: "",
         GH_FIRST_ERR: "",
         FAIL_FIRST: ""
       ]
