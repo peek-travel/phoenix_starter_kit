@@ -41,6 +41,47 @@ defmodule PhoenixStarterKitWeb.PeekPro.EmbedsControllerTest do
       assert html_response(conn, 200) =~ "/peek-pro/settings/?attempt=4"
     end
 
+    for bad_attempt <- ["abc", "5abc", "-1", ""] do
+      test "POST /peek-pro/settings/ with attempt=#{inspect(bad_attempt)} restarts the counter at 1", %{conn: conn} do
+        conn =
+          conn
+          |> assign(:peek_install_id, "install-#{System.unique_integer()}")
+          |> assign(:current_partner, nil)
+          |> assign(:peek_account_user, peek_account_user_fixture())
+          |> post(~p"/peek-pro/settings/", %{"attempt" => unquote(bad_attempt)})
+
+        html = html_response(conn, 200)
+        assert html =~ "/peek-pro/settings/?attempt=1"
+        assert html =~ ~s(name="attempt" value="1")
+      end
+    end
+
+    test "the retry form keeps the peek-auth token, and its POST redirects once the partner exists", %{conn: conn} do
+      install_id = "install-#{System.unique_integer()}"
+      account_user = peek_account_user_fixture()
+      token = PeekAppSDK.Token.new_for_app_installation!(install_id, account_user)
+
+      html =
+        conn
+        |> post(~p"/peek-pro/settings/", %{"peek-auth" => token})
+        |> html_response(200)
+
+      assert html =~ ~s(<form id="retry-form" method="post" action="/peek-pro/settings/?attempt=1")
+      assert html =~ ~s(name="peek-auth" value="#{token}")
+
+      {:ok, _partner} =
+        PhoenixStarterKit.Partners.upsert_for_app_registry_installation(install_id, %{
+          external_refid: "external-#{System.unique_integer()}",
+          platform: :peek,
+          name: "Retry Partner",
+          timezone: "America/New_York"
+        })
+
+      conn = post(build_conn(), "/peek-pro/settings/?attempt=1", %{"attempt" => "1", "peek-auth" => token})
+
+      assert redirected_to(conn) =~ "/settings?auth_token="
+    end
+
     test "POST /peek-pro/settings/ with valid partner redirects with auth token", %{conn: conn} do
       # Create a partner first
       external_refid = "external-#{System.unique_integer()}"

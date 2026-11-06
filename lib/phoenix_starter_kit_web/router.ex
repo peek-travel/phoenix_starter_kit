@@ -94,17 +94,23 @@ defmodule PhoenixStarterKitWeb.Router do
   end
 
   scope "/health", PhoenixStarterKitWeb do
-    pipe_through :api
+    pipe_through [:api, :set_peek_install_id]
 
     post "/", HealthController, :index
   end
 
+  # The demo pages run only when `config :phoenix_starter_kit, :demo_routes` is true (dev and test).
+  # Remove this pipeline together with the /demo scope below.
+  pipeline :demo do
+    plug PhoenixStarterKitWeb.Demo.DemoRoutes
+  end
+
   scope "/demo", PhoenixStarterKitWeb.Demo, as: :demo do
-    pipe_through :browser
+    pipe_through [:demo, :browser]
 
     live_session :demo,
       layout: {PhoenixStarterKitWeb.Layouts, :demo},
-      on_mount: [{PhoenixStarterKitWeb.PartnerUserAuth, :mount_current_partner_user}] do
+      on_mount: [PhoenixStarterKitWeb.Demo.DemoRoutes, {PhoenixStarterKitWeb.PartnerUserAuth, :mount_current_partner_user}] do
       live "/demo_records", DemoRecordLive.Index, :index
       live "/demo_records/new", DemoRecordLive.Form, :new
       live "/demo_records/:id", DemoRecordLive.Show, :show

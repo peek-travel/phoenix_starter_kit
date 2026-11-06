@@ -134,7 +134,8 @@ defmodule PhoenixStarterKitWeb.Registry.WebhookControllerTest do
 
       conn = post(conn, ~p"/peek-pro/api/on-booking-change", input)
 
-      assert response(conn, 200) =~ "Partner #{partner.name} received a booking change"
+      assert response(conn, 200) == "Partner #{partner.name} received a booking change"
+      refute response(conn, 200) =~ "2023-12-14"
     end
 
     test "handles on_booking_change with unknown install ID", %{conn: conn, partner: partner} do

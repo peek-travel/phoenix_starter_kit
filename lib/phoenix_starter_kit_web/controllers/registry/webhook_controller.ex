@@ -9,6 +9,8 @@ defmodule PhoenixStarterKitWeb.Registry.WebhookController do
 
   alias PhoenixStarterKit.Partners
 
+  require Logger
+
   @doc """
   Handles the installation status change webhook from the App Registry.
 
@@ -112,7 +114,8 @@ defmodule PhoenixStarterKitWeb.Registry.WebhookController do
       partner ->
         # This is how you can send tracking events for important happenings:
         # PeekAppSDK.Metrics.track(partner, "booking.changed", %{"test_event_property": "test_value"})
-        send_resp(conn, :ok, "Partner #{partner.name} received a booking change: #{inspect(params)}")
+        Logger.debug("Booking change for partner #{partner.id} with params: #{inspect(Map.keys(params))}")
+        send_resp(conn, :ok, "Partner #{partner.name} received a booking change")
     end
   end
 end

@@ -85,7 +85,7 @@ Provides health check and usage metrics:
 - `/registry/api/on-installation-status-change` - Installation webhook
 - `/peek-pro/api/on-booking-change` - Booking change webhook
 - `/health` - Health check endpoint
-- `/demo/*` - Demo CRUD functionality
+- `/demo/*` - Demo CRUD functionality (only when `:demo_routes` is `true`: dev and test)
 
 ### Data Model
 

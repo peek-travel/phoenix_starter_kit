@@ -14,7 +14,36 @@ defmodule PhoenixStarterKitWeb.HealthControllerTest do
              }
     end
 
-    test "returns usage information when checkType is usage", %{conn: conn} do
+    test "returns health status when checkType is health and the x-peek-auth token does not verify", %{conn: conn} do
+      conn =
+        conn
+        |> put_req_header("x-peek-auth", "Bearer not-a-valid-token")
+        |> post(~p"/health", %{"checkType" => "health"})
+
+      assert %{"ragStatus" => "green"} = json_response(conn, 200)
+    end
+
+    test "returns 401 and no partner counts for usage without an x-peek-auth token", %{conn: conn} do
+      partner_fixture(%{
+        app_registry_installation: %{status: :installed, display_version: "1.0.0", install_id: "install-1"},
+        is_test: false
+      })
+
+      conn = post(conn, ~p"/health", %{"checkType" => "usage"})
+
+      assert json_response(conn, 401) == %{"error" => "Unauthorized"}
+    end
+
+    test "returns 401 for usage with a token that does not verify", %{conn: conn} do
+      conn =
+        conn
+        |> put_req_header("x-peek-auth", "Bearer not-a-valid-token")
+        |> post(~p"/health", %{"checkType" => "usage"})
+
+      assert json_response(conn, 401) == %{"error" => "Unauthorized"}
+    end
+
+    test "returns usage information when checkType is usage and the x-peek-auth token is valid", %{conn: conn} do
       # Create a partner with installed status
       _partner1 =
         partner_fixture(%{
@@ -71,7 +100,10 @@ defmodule PhoenixStarterKitWeb.HealthControllerTest do
           is_test: true
         })
 
-      conn = post(conn, ~p"/health", %{"checkType" => "usage"})
+      conn =
+        conn
+        |> put_req_header("x-peek-auth", "Bearer #{PeekAppSDK.Token.new_for_app_installation!("install-1")}")
+        |> post(~p"/health", %{"checkType" => "usage"})
 
       response = json_response(conn, 200)
       # Only non-test partners with installed or update_installed status should be counted

@@ -46,7 +46,12 @@ The application exposes several API endpoints:
    - `/peek-pro/api/on-booking-change`: Processes booking change notifications from Peek Pro
 
 2. **Health Check Endpoint**:
-   - `/health`: Provides health status information about the application
+   - `POST /health` with `checkType=health`: returns the health status. It needs no token.
+   - `POST /health` with `checkType=usage`: returns the partner usage counts for all partners. It needs a valid Peek auth token (an `x-peek-auth: Bearer <token>` header, or a `peek-auth` param) and returns 401 without one.
+
+3. **Demo pages**:
+   - `/demo/*`: example CRUD pages. They run only when `config :phoenix_starter_kit, :demo_routes` is `true`.
+     `config/dev.exs` and `config/test.exs` set it. Other environments return 404.
 
 ## Technical Architecture
 
@@ -203,7 +208,8 @@ Your app will be available at `https://phoenix-starter-kit-dev.peeklabs.com` (or
 - Automatically installs `cloudflared` if needed
 - Creates a Cloudflare tunnel with SSL and WebSocket support
 - Sets up DNS routing to `{your-app-name}-dev.peeklabs.com`
-- Reuses existing tunnels when possible, recreates them when switching machines/developers
+- Reuses an existing tunnel when this machine has its credentials file
+- Never deletes an existing tunnel. If the tunnel exists but this machine has no credentials file for it, the script stops and shows how to copy the file
 
 **Multiple projects:** Each app gets its own tunnel config, so you can run multiple projects simultaneously on different ports.
 
@@ -211,6 +217,7 @@ Your app will be available at `https://phoenix-starter-kit-dev.peeklabs.com` (or
 
 Running `bin/sync app.json` requires `PEEK_APP_REGISTRY_URL` and `PEEK_APP_REGISTRY_AUTH_TOKEN` values.
 These values are provided by Peek and must be configured in `.env` before running `bin/sync app.json`.
+`bin/sync` reads only these two `KEY=VALUE` lines from `.env`. It does not run `.env` as a shell script.
 
 When running this command, you will be given a secret token.
 Enter this token as the value to the `PEEK_APP_SECRET` variable in the `.env` file.

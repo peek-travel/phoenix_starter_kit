@@ -11,9 +11,7 @@ defmodule PhoenixStarterKitWeb.PeekPro.EmbedsController do
     # The idea is to try again and again until it works and if after a minute or
     # so it still doesn't we can give up.
 
-    attempt = Map.get(params, "attempt", "0") |> String.to_integer()
-
-    next_attempt = attempt + 1
+    next_attempt = parse_attempt(params["attempt"]) + 1
     current_path = conn.request_path
     redirect_url = "#{current_path}?attempt=#{next_attempt}"
 
@@ -23,7 +21,11 @@ defmodule PhoenixStarterKitWeb.PeekPro.EmbedsController do
     |> fetch_flash()
     |> put_root_layout(false)
     |> put_layout(false)
-    |> render(:loading, redirect_url: redirect_url, next_attempt: next_attempt)
+    |> render(:loading,
+      redirect_url: redirect_url,
+      next_attempt: next_attempt,
+      peek_auth: Map.get(conn.assigns, :peek_install_token)
+    )
   end
 
   def landing(
@@ -58,6 +60,16 @@ defmodule PhoenixStarterKitWeb.PeekPro.EmbedsController do
     |> put_layout(false)
     |> render(:expired)
   end
+
+  # Returns the attempt number from the params. A missing, non-integer or negative value gives 0.
+  defp parse_attempt(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {attempt, ""} when attempt >= 0 -> attempt
+      _ -> 0
+    end
+  end
+
+  defp parse_attempt(_value), do: 0
 
   defp locale_from_peek_auth(%{assigns: %{peek_account_user: %{locale: locale}}})
        when is_binary(locale) and locale != "",

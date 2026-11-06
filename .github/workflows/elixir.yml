@@ -8,6 +8,9 @@ on:
   # built-in GITHUB_TOKEN, whose pushes don't trigger `push` workflows
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 env:
   MIX_ENV: test
 
@@ -109,8 +112,6 @@ jobs:
     name: Tests
     needs: compile
     runs-on: ubuntu-latest
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     services:
       postgres:
         image: postgres:17-alpine
