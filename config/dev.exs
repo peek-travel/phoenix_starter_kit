@@ -24,15 +24,36 @@ config :phoenix_starter_kit, PhoenixStarterKitWeb.Endpoint,
   check_origin: false,
   code_reloader: true,
   debug_errors: true,
-  # NOTE: This is a hardcoded secret for DEVELOPMENT ONLY.
-  # In production, this is loaded from environment variables.
-  # You can generate a new one with: mix phx.gen.secret
-  secret_key_base: "xwhIq+DZ3qJt44M7LP1fy2GJFWzzDluFMlPMtCRYK9MZCk2+yhfyCOF8MZQZtFn2",
   watchers: [
     esbuild: {Esbuild, :install_and_run, [:phoenix_starter_kit, ~w(--sourcemap=inline --watch)]},
     tailwind: {Tailwind, :install_and_run, [:phoenix_starter_kit, ~w(--watch)]},
     esbuild_widget: {Esbuild, :install_and_run, [:widget_extension, ~w(--watch)]}
   ]
+
+# The dev secret_key_base and LiveView signing salt come from
+# config/dev.secret.exs. Git ignores this file, so each app has its own values.
+# When the file is missing, bin/dev-secrets makes it. bin/setup runs it too.
+# Prod reads SECRET_KEY_BASE from the environment in config/runtime.exs.
+dev_secret_path = Path.expand("dev.secret.exs", __DIR__)
+
+unless File.exists?(dev_secret_path) do
+  {output, status} = System.cmd(Path.expand("../bin/dev-secrets", __DIR__), [dev_secret_path], stderr_to_stdout: true)
+  if status != 0, do: raise("bin/dev-secrets failed:\n" <> output)
+end
+
+dev_secret =
+  case Code.eval_file(dev_secret_path) do
+    {[secret_key_base: secret_key_base, live_view_signing_salt: live_view_signing_salt], _binding}
+    when is_binary(secret_key_base) and is_binary(live_view_signing_salt) ->
+      [secret_key_base: secret_key_base, live_view_signing_salt: live_view_signing_salt]
+
+    _other ->
+      raise "config/dev.secret.exs is not valid. Remove it and run bin/dev-secrets to make a new one."
+  end
+
+config :phoenix_starter_kit, PhoenixStarterKitWeb.Endpoint,
+  secret_key_base: dev_secret[:secret_key_base],
+  live_view: [signing_salt: dev_secret[:live_view_signing_salt]]
 
 # ## SSL Support
 #
