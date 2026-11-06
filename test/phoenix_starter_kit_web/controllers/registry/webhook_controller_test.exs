@@ -2,6 +2,8 @@ defmodule PhoenixStarterKitWeb.Registry.WebhookControllerTest do
   use PhoenixStarterKitWeb.ConnCase, async: false
 
   alias PhoenixStarterKit.Partners
+  alias PhoenixStarterKit.Partners.Partner
+  alias PhoenixStarterKit.Repo
 
   def authenticate_peek_pro_request(ctx) do
     %{conn: conn} = ctx
@@ -24,7 +26,7 @@ defmodule PhoenixStarterKitWeb.Registry.WebhookControllerTest do
 
       payload = legacy_registry_payload(external_refid, name, install_id)
 
-      conn = post(conn, ~p"/registry/api/on-installation-status-change", payload)
+      conn = post_signed_install_webhook(conn, payload)
 
       assert response(conn, 200) == "Partner Test Partner updated successfully."
       partner = Partners.get_partner_by_external_id(external_refid)
@@ -45,7 +47,7 @@ defmodule PhoenixStarterKitWeb.Registry.WebhookControllerTest do
         |> put_in(["status"], "uninstalled")
         |> put_in(["display_version"], "2.0.0")
 
-      conn = post(conn, ~p"/registry/api/on-installation-status-change", payload)
+      conn = post_signed_install_webhook(conn, payload)
 
       assert response(conn, 200) == "Partner #{partner.name} updated successfully."
       updated_partner = Partners.get_partner_by_app_registry_install_refid(install_id)
@@ -63,7 +65,7 @@ defmodule PhoenixStarterKitWeb.Registry.WebhookControllerTest do
       payload = legacy_registry_payload(external_refid, name, install_id)
       payload = put_in(payload, ["account", "is_test"], true)
 
-      conn = post(conn, ~p"/registry/api/on-installation-status-change", payload)
+      conn = post_signed_install_webhook(conn, payload)
 
       assert response(conn, 200) == "Partner Test Partner updated successfully."
       partner = Partners.get_partner_by_external_id(external_refid)
@@ -78,7 +80,7 @@ defmodule PhoenixStarterKitWeb.Registry.WebhookControllerTest do
       payload = legacy_registry_payload(external_refid, name, install_id)
       payload = put_in(payload, ["account", "timezone"], "America/New_York")
 
-      conn = post(conn, ~p"/registry/api/on-installation-status-change", payload)
+      conn = post_signed_install_webhook(conn, payload)
 
       assert response(conn, 200) == "Partner Test Partner updated successfully."
       partner = Partners.get_partner_by_external_id(external_refid)
@@ -95,7 +97,7 @@ defmodule PhoenixStarterKitWeb.Registry.WebhookControllerTest do
         legacy_registry_payload(external_refid, name, install_id)
         |> put_in(["account", "platform"], "acme")
 
-      conn = post(conn, ~p"/registry/api/on-installation-status-change", payload)
+      conn = post_signed_install_webhook(conn, payload)
 
       assert response(conn, 200) == "Partner Test Partner updated successfully."
       partner = Partners.get_partner_by_external_id(external_refid)
@@ -110,13 +112,85 @@ defmodule PhoenixStarterKitWeb.Registry.WebhookControllerTest do
 
       payload = registry_2_payload(external_refid, name, install_id, api_url: "https://api.cng.example.com")
 
-      conn = post(conn, ~p"/registry/api/on-installation-status-change", payload)
+      conn = post_signed_install_webhook(conn, payload)
 
       assert response(conn, 200) == "Partner Cross-Brand Partner updated successfully."
       partner = Partners.get_partner_by_external_id(external_refid)
       assert partner.name == name
       assert partner.api_config.url == "https://api.cng.example.com"
       assert partner.timezone == nil
+    end
+  end
+
+  describe "Registry webhook - on_installation_status_change without a matching token" do
+    setup :authenticate_peek_pro_request
+
+    setup %{partner: partner} do
+      payload =
+        partner.external_refid
+        |> legacy_registry_payload("New Name", partner.app_registry_installation_refid)
+        |> put_in(["status"], "uninstalled")
+        |> put_in(["display_version"], "9.9.9")
+
+      %{payload: payload}
+    end
+
+    test "returns 401 and changes no data when the X-Peek-Auth header is missing", ctx do
+      ctx.conn |> delete_req_header("x-peek-auth") |> assert_rejected(ctx)
+    end
+
+    test "returns 401 and changes no data when the token is not a JWT", ctx do
+      ctx.conn |> put_req_header("x-peek-auth", "Bearer not-a-token") |> assert_rejected(ctx)
+    end
+
+    test "returns 401 and changes no data when the token signature is wrong", ctx do
+      [header, claims, _signature] = ctx.payload["install_id"] |> PeekAppSDK.Token.new_for_app_installation!() |> String.split(".")
+      token = Enum.join([header, claims, Base.url_encode64("wrong", padding: false)], ".")
+
+      ctx.conn |> put_req_header("x-peek-auth", "Bearer #{token}") |> assert_rejected(ctx)
+    end
+
+    test "returns 401 and changes no data when the header has no Bearer prefix", ctx do
+      token = PeekAppSDK.Token.new_for_app_installation!(ctx.payload["install_id"])
+
+      ctx.conn |> put_req_header("x-peek-auth", token) |> assert_rejected(ctx)
+    end
+
+    test "returns 401 and changes no data when the token is for another install", ctx do
+      other_partner = PhoenixStarterKit.PartnersFixtures.partner_fixture()
+
+      ctx.conn |> sign(other_partner.app_registry_installation_refid) |> assert_rejected(ctx)
+      assert Repo.reload!(other_partner) == other_partner
+    end
+
+    test "returns 401 and changes no data when the body has no install_id", ctx do
+      ctx = Map.update!(ctx, :payload, &Map.delete(&1, "install_id"))
+
+      assert_rejected(ctx.conn, ctx)
+    end
+
+    test "returns 401 and changes no data when the token is only in a peek-auth param", ctx do
+      token = PeekAppSDK.Token.new_for_app_installation!(ctx.payload["install_id"])
+      ctx = Map.update!(ctx, :payload, &Map.put(&1, "peek-auth", token))
+
+      ctx.conn |> delete_req_header("x-peek-auth") |> assert_rejected(ctx)
+    end
+  end
+
+  describe "Registry webhook - on_booking_change without a valid token" do
+    test "returns 401 when the X-Peek-Auth header is missing", %{conn: conn} do
+      conn = post(conn, ~p"/peek-pro/api/on-booking-change", %{"booking_id" => "123"})
+
+      assert response(conn, 401) == "Unauthorized."
+    end
+
+    test "returns 401 when the token is not valid", %{conn: conn} do
+      conn =
+        conn
+        |> put_req_header("x-peek-auth", "Bearer not-a-token")
+        |> post(~p"/peek-pro/api/on-booking-change", %{"booking_id" => "123"})
+
+      assert response(conn, 401) == "Unauthorized."
     end
   end
 
@@ -152,6 +226,30 @@ defmodule PhoenixStarterKitWeb.Registry.WebhookControllerTest do
 
       assert response(conn, 200) == "Unknown install ID"
     end
+  end
+
+  # A registry token: its `sub` is the install id.
+  defp sign(conn, install_id) do
+    put_req_header(conn, "x-peek-auth", "Bearer #{PeekAppSDK.Token.new_for_app_installation!(install_id)}")
+  end
+
+  # Posts the install webhook with a token for the body install_id, as the registry does.
+  defp post_signed_install_webhook(conn, %{"install_id" => install_id} = payload) do
+    conn
+    |> sign(install_id)
+    |> post(~p"/registry/api/on-installation-status-change", payload)
+  end
+
+  defp assert_rejected(conn, %{partner: partner, payload: payload}) do
+    reject(PeekAppSDK.Metrics, :track_install, 1)
+    reject(PeekAppSDK.Metrics, :track_uninstall, 1)
+    partner_count = Repo.aggregate(Partner, :count)
+
+    conn = post(conn, ~p"/registry/api/on-installation-status-change", payload)
+
+    assert response(conn, 401) == "Unauthorized."
+    assert Repo.aggregate(Partner, :count) == partner_count
+    assert Repo.reload!(partner) == partner
   end
 
   defp legacy_registry_payload(external_refid, name, install_id) do

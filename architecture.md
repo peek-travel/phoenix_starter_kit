@@ -73,7 +73,8 @@ Provides health check and usage metrics:
 
 - **`:browser`**: Standard Phoenix browser pipeline with partner user auth
 - **`:api`**: JSON API endpoints
-- **`:webhook`**: Webhook endpoints from Registry (authenticated via SDK)
+- **`:install_webhook`**: Install webhook from Registry. The SDK plug `require_signed_install_webhook` returns 401 unless the `X-Peek-Auth` header has a valid token for the body `install_id`
+- **`:webhook`**: Other webhook endpoints from Registry (authenticated via SDK; no valid token gives 401)
 - **`:peek_pro_embed`**: Embedded iframe endpoints (authenticated via Peek Pro)
 - **`:widget_api`**: Client-side widget endpoints (optional, with CORS)
 

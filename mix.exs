@@ -73,7 +73,7 @@ defmodule PhoenixStarterKit.MixProject do
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.1"},
       {:dotenvy, "~> 1.0"},
-      {:peek_app_sdk, git: "https://github.com/peek-travel/peek_app_sdk.git", branch: "main"},
+      {:peek_app_sdk, git: "https://github.com/peek-travel/peek_app_sdk.git", ref: "a1166ee4b2a4e8ea2def5234b52bfca1983bb3d8"},
       {:excoveralls, "~> 0.16"},
       {:mimic, "~> 2.0", only: :test},
       {:tidewave, "~> 0.4", only: :dev},
