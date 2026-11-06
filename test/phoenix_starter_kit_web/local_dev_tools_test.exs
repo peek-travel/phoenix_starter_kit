@@ -101,6 +101,11 @@ defmodule PhoenixStarterKitWeb.LocalDevToolsTest do
       assert get(proxied_conn(), "/%74idewave/mcp").status == 404
     end
 
+    test "get a plain 404 for a bad percent code" do
+      {404, _headers, body} = proxied_conn() |> get("/%zz/x") |> Plug.Test.sent_resp()
+      assert body == "Not Found"
+    end
+
     test "get 404 from the router plug" do
       conn = get(proxied_conn(), "/tools/page")
       assert conn.status == 404
