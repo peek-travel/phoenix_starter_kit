@@ -47,7 +47,7 @@ The application exposes several API endpoints:
 
 2. **Health Check Endpoint**:
    - `POST /health` with `checkType=health`: returns the health status. It needs no token.
-   - `POST /health` with `checkType=usage`: returns partner usage counts. It needs a valid `x-peek-auth` token and returns 401 without one.
+   - `POST /health` with `checkType=usage`: returns the partner usage counts for all partners. It needs a valid Peek auth token (an `x-peek-auth: Bearer <token>` header, or a `peek-auth` param) and returns 401 without one.
 
 3. **Demo pages**:
    - `/demo/*`: example CRUD pages. They run only when `config :phoenix_starter_kit, :demo_routes` is `true`.

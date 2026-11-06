@@ -3,7 +3,10 @@ defmodule PhoenixStarterKitWeb.HealthController do
   Answers `POST /health`.
 
   `checkType=health` needs no token.
-  `checkType=usage` needs a valid `x-peek-auth` token, else it returns 401.
+  `checkType=usage` needs a valid Peek auth token, else it returns 401.
+  `PeekAppSDK.Plugs.PeekAuth.set_peek_install_id/2` reads the token from a `peek-auth`
+  body or query param, or from an `x-peek-auth: Bearer <token>` header.
+  The usage counts are totals for all partners. Any install's valid token unlocks them.
   """
   use PhoenixStarterKitWeb, :controller
 
