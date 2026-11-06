@@ -98,7 +98,7 @@ defmodule PhoenixStarterKitWeb.Router do
   end
 
   scope "/health", PhoenixStarterKitWeb do
-    pipe_through :api
+    pipe_through [:api, :set_peek_install_id]
 
     post "/", HealthController, :index
   end
