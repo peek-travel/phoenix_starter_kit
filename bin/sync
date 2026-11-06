@@ -58,17 +58,45 @@ if [[ ! -f ".env" ]]; then
   error_exit ".env file not found in project root. Please create it and define PEEK_APP_REGISTRY_URL and PEEK_APP_REGISTRY_AUTH_TOKEN."
 fi
 
-log_debug "Parsing .env file"
-set -o allexport
-source .env
-set +o allexport
+# Print the value of KEY from .env. The file is read as KEY=VALUE lines; it is not run.
+# Accepts an optional "export " prefix and single or double quotes around the value.
+# Removes a " # comment" after an unquoted value. The last line for KEY wins.
+read_env_value() {
+  local key=$1 line value="" found=""
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%$'\r'}"
+    if [[ "$line" =~ ^[[:space:]]*(export[[:space:]]+)?${key}[[:space:]]*=(.*)$ ]]; then
+      value="${BASH_REMATCH[2]}"
+      value="${value#"${value%%[![:space:]]*}"}"
+      if [[ "$value" =~ ^\"(.*)\"[[:space:]]*(#.*)?$ ]] || [[ "$value" =~ ^\'(.*)\'[[:space:]]*(#.*)?$ ]]; then
+        value="${BASH_REMATCH[1]}"
+      else
+        value="${value%%[[:space:]]#*}"
+        value="${value%"${value##*[![:space:]]}"}"
+      fi
+      found=1
+    fi
+  done < .env
+  [[ -n "$found" ]] && printf '%s' "$value"
+  return 0
+}
 
-# Validate required env vars
-[[ -z "$PEEK_APP_REGISTRY_URL" ]] && error_exit "Missing PEEK_APP_REGISTRY_URL in .env"
-[[ -z "$PEEK_APP_REGISTRY_AUTH_TOKEN" ]] && error_exit "Missing PEEK_APP_REGISTRY_AUTH_TOKEN in .env"
+log_debug "Reading .env file"
+URL=$(read_env_value PEEK_APP_REGISTRY_URL)
+TOKEN=$(read_env_value PEEK_APP_REGISTRY_AUTH_TOKEN)
 
-URL="$PEEK_APP_REGISTRY_URL"
-TOKEN="$PEEK_APP_REGISTRY_AUTH_TOKEN"
+# Validate required values
+[[ -z "$URL" ]] && error_exit "Missing PEEK_APP_REGISTRY_URL in .env"
+[[ -z "$TOKEN" ]] && error_exit "Missing PEEK_APP_REGISTRY_AUTH_TOKEN in .env"
+
+# Print a curl config with the Authorization header. curl reads it on stdin (--config -),
+# so the token is not in the curl command line.
+auth_config() {
+  local bs='\' dq='"' escaped
+  escaped=${TOKEN//"$bs"/"$bs$bs"}
+  escaped=${escaped//"$dq"/"$bs$dq"}
+  printf 'header = "Authorization: Bearer %s"\n' "$escaped"
+}
 
 log_debug "Using Registry URL: $URL"
 log_debug "Using Auth Token: Bearer [REDACTED]"
@@ -132,10 +160,10 @@ if [ "$PULL_MODE" = true ]; then
   log_debug "Fetching from $EXPORT_URL"
 
   set +e
-  RESPONSE=$(curl --silent --show-error --write-out "\nHTTP_STATUS:%{http_code}" \
+  RESPONSE=$(auth_config | curl --silent --show-error --write-out "\nHTTP_STATUS:%{http_code}" \
+    --config - \
     --request GET \
     --url "$EXPORT_URL" \
-    --header "Authorization: Bearer $TOKEN" \
     --header "User-Agent: sync-script/1.0")
   CURL_EXIT=$?
   set -e
@@ -193,10 +221,10 @@ send_request() {
   log_debug "Sending POST request to $FINAL_URL"
 
   set +e
-  RESPONSE=$(curl --silent --show-error --write-out "\nHTTP_STATUS:%{http_code}" \
+  RESPONSE=$(auth_config | curl --silent --show-error --write-out "\nHTTP_STATUS:%{http_code}" \
+    --config - \
     --request POST \
     --url "$FINAL_URL" \
-    --header "Authorization: Bearer $TOKEN" \
     --header "Content-Type: application/json" \
     --header "User-Agent: sync-script/1.0" \
     --data "@$JSON_FILE")
