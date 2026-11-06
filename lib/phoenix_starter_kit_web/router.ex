@@ -123,10 +123,17 @@ defmodule PhoenixStarterKitWeb.Router do
     # as long as you are also using SSL (which you should anyway).
     import Phoenix.LiveDashboard.Router
 
-    scope "/dev" do
-      pipe_through :browser
+    pipeline :local_dev_tools do
+      plug PhoenixStarterKitWeb.LocalDevTools
+    end
 
-      live_dashboard "/dashboard", metrics: PhoenixStarterKitWeb.Telemetry
+    scope "/dev" do
+      pipe_through [:local_dev_tools, :browser]
+
+      live_dashboard "/dashboard",
+        metrics: PhoenixStarterKitWeb.Telemetry,
+        on_mount: [{PhoenixStarterKitWeb.LocalDevTools, :local_only}]
+
       forward "/mailbox", Plug.Swoosh.MailboxPreview
     end
   end
