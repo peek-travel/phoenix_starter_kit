@@ -219,6 +219,13 @@ jobs:
           git checkout -b "$BRANCH"
           echo "name=$BRANCH" >> "$GITHUB_OUTPUT"
 
+      # Claude can write files. The steps that give the bot token to git
+      # first check that .git/config is the same as here and that
+      # .git/hooks has no hook.
+      - name: Record git config
+        id: git_state
+        run: echo "config_sha=$(sha256sum .git/config | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
       # Each step that runs `claude` starts with the same lines: trim the
       # Claude key, export it as the variable that Claude Code reads for
       # that kind of key, and unset CLAUDE_AUTH_VALUE. It also hides
@@ -344,17 +351,29 @@ jobs:
       # env: GIT_CONFIG_COUNT/KEY/VALUE set an http.extraheader, the same
       # header that actions/checkout uses. The token is not on a command
       # line and not in a file; ::add-mask:: hides the header in the log.
-      # GIT_CONFIG_GLOBAL=/dev/null and GIT_CONFIG_NOSYSTEM=1 make git
-      # ignore the user and system config. core.hooksPath=/dev/null and
-      # --no-verify skip the hooks. The push goes to the repo URL, not to
-      # a remote name.
+      # Each of these steps first checks .git/config and .git/hooks (see
+      # "Record git config"), and sets GIT_CONFIG_GLOBAL=/dev/null and
+      # GIT_CONFIG_NOSYSTEM=1, so git ignores the user and system config.
+      # core.hooksPath=/dev/null and --no-verify skip the hooks. The push
+      # goes to the repo URL, not to a remote name.
       - name: Push branch and open draft PR
         id: pr
         env:
           GH_TOKEN: ${{ secrets.APP_UPDATES_GH_TOKEN || secrets.ACME_CI_GITHUB_TOKEN || secrets.GH_TOKEN }}
           BRANCH: ${{ steps.branch.outputs.name }}
           REPO: ${{ github.repository }}
+          GIT_CONFIG_SHA: ${{ steps.git_state.outputs.config_sha }}
         run: |
+          # Stop before git gets the bot token when .git/config changed after
+          # "Record git config" or .git/hooks has a hook. Then git ignores
+          # the user and system config for the rest of the step.
+          if [ "$(sha256sum .git/config | cut -d' ' -f1)" != "$GIT_CONFIG_SHA" ] \
+              || [ -n "$(find .git/hooks -type f ! -name '*.sample' 2>/dev/null)" ]; then
+            echo "::error::.git/config or .git/hooks changed after the Claude steps started. The job stops before git uses the bot token."
+            exit 1
+          fi
+          export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+
           # Compare content, not commits: commits that cancel each other out
           # leave `git log main..HEAD` non-empty but change no file, which
           # used to open empty PRs. The skill's own SKILL.md (and its pending
@@ -392,7 +411,7 @@ jobs:
           # despite the override above, this still lands on the right ref.
           AUTH_HEADER="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
           echo "::add-mask::$AUTH_HEADER"
-          GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_COUNT=2 \
+          GIT_CONFIG_COUNT=2 \
             GIT_CONFIG_KEY_0="core.hooksPath" GIT_CONFIG_VALUE_0=/dev/null \
             GIT_CONFIG_KEY_1="http.https://github.com/.extraheader" GIT_CONFIG_VALUE_1="$AUTH_HEADER" \
             git push --no-verify "https://github.com/$REPO.git" HEAD:"refs/heads/$BRANCH"
@@ -723,14 +742,14 @@ jobs:
           # can pass.
           collect_failure_logs() {
             local sha="$1" run_json run_ids run_id run_log
-            run_json=$(gh_read run list --branch "$BRANCH" --limit 100 --json databaseId,conclusion,headSha)
+            run_json=$(gh_read run list --repo "$REPO" --branch "$BRANCH" --limit 100 --json databaseId,conclusion,headSha)
             [ "$?" -eq 3 ] && return 3
             # shellcheck disable=SC2016 # $sha is a jq variable, not a shell one
             run_ids=$(printf '%s' "$run_json" | jq -r --arg sha "$sha" \
                 '.[] | select(.headSha==$sha and (.conclusion=="failure" or .conclusion=="timed_out" or .conclusion=="action_required")) | .databaseId')
             LOG_FILE=$(mktemp "${RUNNER_TEMP:-/tmp}/ci-failure-log.XXXXXX")
             for run_id in $run_ids; do
-              run_log=$(gh_read run view "$run_id" --log-failed)
+              run_log=$(gh_read run view "$run_id" --repo "$REPO" --log-failed)
               [ "$?" -eq 3 ] && return 3
               printf '%s\n' "$(printf '%s' "$run_log" | tail -c 8000)" >> "$LOG_FILE"
             done
@@ -856,9 +875,8 @@ jobs:
             echo "committed=true" >> "$OUTPUT_FILE"
           fi
 
-      # The same push as in "Push branch and open draft PR": the token goes
-      # to git in the process env only, git ignores the user and system
-      # config and the hooks.
+      # The same push as in "Push branch and open draft PR": the same
+      # checks, and the token goes to git in the process env only.
       - name: Push fix (attempt 1)
         id: push_1
         if: steps.fix_1.outputs.committed == 'true'
@@ -866,11 +884,31 @@ jobs:
           GH_TOKEN: ${{ secrets.APP_UPDATES_GH_TOKEN || secrets.ACME_CI_GITHUB_TOKEN || secrets.GH_TOKEN }}
           BRANCH: ${{ steps.branch.outputs.name }}
           REPO: ${{ github.repository }}
+          GIT_CONFIG_SHA: ${{ steps.git_state.outputs.config_sha }}
+          CURRENT_SHA: ${{ steps.wait_0.outputs.sha }}
           ATTEMPT: 1
         run: &push_fix |
+          # Stop before git gets the bot token when .git/config changed after
+          # "Record git config" or .git/hooks has a hook. Then git ignores
+          # the user and system config for the rest of the step.
+          if [ "$(sha256sum .git/config | cut -d' ' -f1)" != "$GIT_CONFIG_SHA" ] \
+              || [ -n "$(find .git/hooks -type f ! -name '*.sample' 2>/dev/null)" ]; then
+            echo "::error::.git/config or .git/hooks changed after the Claude steps started. The job stops before git uses the bot token."
+            exit 1
+          fi
+          export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+
+          # A push runs the workflows of the pushed commit, with this repo's
+          # secrets. So a fix commit must not change a workflow file.
+          if [ -n "$(git diff --name-only "$CURRENT_SHA" HEAD -- .github/workflows)" ]; then
+            echo "::error::Fix attempt $ATTEMPT changed a file in .github/workflows. The job does not push it. Examine the run by hand."
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           AUTH_HEADER="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
           echo "::add-mask::$AUTH_HEADER"
-          if GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_COUNT=2 \
+          if GIT_CONFIG_COUNT=2 \
               GIT_CONFIG_KEY_0="core.hooksPath" GIT_CONFIG_VALUE_0=/dev/null \
               GIT_CONFIG_KEY_1="http.https://github.com/.extraheader" GIT_CONFIG_VALUE_1="$AUTH_HEADER" \
               git push --no-verify "https://github.com/$REPO.git" HEAD:"refs/heads/$BRANCH"; then
@@ -910,6 +948,8 @@ jobs:
           GH_TOKEN: ${{ secrets.APP_UPDATES_GH_TOKEN || secrets.ACME_CI_GITHUB_TOKEN || secrets.GH_TOKEN }}
           BRANCH: ${{ steps.branch.outputs.name }}
           REPO: ${{ github.repository }}
+          GIT_CONFIG_SHA: ${{ steps.git_state.outputs.config_sha }}
+          CURRENT_SHA: ${{ steps.wait_1.outputs.sha }}
           ATTEMPT: 2
         run: *push_fix
 
@@ -943,7 +983,7 @@ jobs:
         if: steps.pr.outputs.had_changes == 'true' && steps.checks.outputs.status == 'passed'
         env:
           GH_TOKEN: ${{ secrets.APP_UPDATES_GH_TOKEN || secrets.ACME_CI_GITHUB_TOKEN || secrets.GH_TOKEN }}
-        run: gh pr ready "${{ steps.pr.outputs.number }}"
+        run: gh pr ready "${{ steps.pr.outputs.number }}" --repo "${{ github.repository }}"
 
       - name: Slack notify - success
         if: steps.pr.outputs.had_changes == 'true' && steps.checks.outputs.status == 'passed'
