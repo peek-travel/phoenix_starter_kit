@@ -45,3 +45,6 @@ config :peek_app_sdk,
   peek_app_secret: "test-app-secret"
 
 # Tesla adapter configuration removed - using mimic for mocking instead
+
+# Turn on the /demo pages (see PhoenixStarterKitWeb.Demo.DemoRoutes)
+config :phoenix_starter_kit, demo_routes: true
