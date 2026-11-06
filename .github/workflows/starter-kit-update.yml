@@ -229,9 +229,10 @@ jobs:
       # Each step that runs `claude` starts with the same lines: trim the
       # Claude key, export it as the variable that Claude Code reads for
       # that kind of key, and unset CLAUDE_AUTH_VALUE. It also hides
-      # $GITHUB_OUTPUT, $GITHUB_ENV and $GITHUB_PATH from `claude`, and
-      # empties the env and path files after `claude` exits, so text that
-      # Claude wrote there does not change the env of a later step.
+      # $GITHUB_OUTPUT, $GITHUB_ENV, $GITHUB_PATH and $GITHUB_STEP_SUMMARY
+      # from `claude`, and empties the env, path and summary files after
+      # `claude` exits, so text that Claude wrote there does not change the
+      # env of a later step.
       - name: Run starter-kit-update skill (backport)
         env:
           CLAUDE_AUTH_VALUE: ${{ secrets.APP_UPDATES_CLAUDE_API_KEY }}
@@ -245,7 +246,8 @@ jobs:
 
           ENV_FILE="$GITHUB_ENV"
           PATH_FILE="$GITHUB_PATH"
-          unset GITHUB_OUTPUT GITHUB_ENV GITHUB_PATH
+          STEP_SUMMARY_FILE="$GITHUB_STEP_SUMMARY"
+          unset GITHUB_OUTPUT GITHUB_ENV GITHUB_PATH GITHUB_STEP_SUMMARY
 
           # `|| CLAUDE_EXIT=$?` keeps `bash -e` from stopping the step before
           # the files are emptied.
@@ -266,6 +268,7 @@ jobs:
 
           : > "$ENV_FILE"
           : > "$PATH_FILE"
+          : > "$STEP_SUMMARY_FILE"
           exit "$CLAUDE_EXIT"
 
       # Re-run on purpose: step 5 above may have just bumped this branch's
@@ -279,7 +282,10 @@ jobs:
           version-file: .tool-versions
           version-type: strict
 
+      # Runs outside the repo: mix loads the mix.exs of the current folder,
+      # and Claude can change this one.
       - name: Re-install hex and rebar for the re-synced toolchain
+        working-directory: ${{ runner.temp }}
         run: |
           mix local.hex --force
           mix local.rebar --force
@@ -298,7 +304,8 @@ jobs:
 
           ENV_FILE="$GITHUB_ENV"
           PATH_FILE="$GITHUB_PATH"
-          unset GITHUB_OUTPUT GITHUB_ENV GITHUB_PATH
+          STEP_SUMMARY_FILE="$GITHUB_STEP_SUMMARY"
+          unset GITHUB_OUTPUT GITHUB_ENV GITHUB_PATH GITHUB_STEP_SUMMARY
 
           # `|| CLAUDE_EXIT=$?` keeps `bash -e` from stopping the step before
           # the files are emptied.
@@ -321,6 +328,7 @@ jobs:
 
           : > "$ENV_FILE"
           : > "$PATH_FILE"
+          : > "$STEP_SUMMARY_FILE"
           exit "$CLAUDE_EXIT"
 
       # The harness blocks Claude's own Edit/Write tools on any path under
@@ -343,7 +351,9 @@ jobs:
             git rm --cached --quiet --ignore-unmatch -- "$PENDING"
             git add -- "$TARGET"
             if ! git diff --cached --quiet; then
-              git commit -m "chore: land pending SKILL.md self-improvement"
+              # No hooks: Claude can write files, and this step has a live
+              # $GITHUB_ENV.
+              git -c core.hooksPath=/dev/null commit --no-verify -m "chore: land pending SKILL.md self-improvement"
             fi
           fi
 
@@ -805,8 +815,9 @@ jobs:
 
       # Claude reads the CI log in this step, so the step has only the
       # Claude key: no GitHub token and no Slack webhook. It hides
-      # $GITHUB_OUTPUT, $GITHUB_ENV and $GITHUB_PATH from `claude`, and
-      # after `claude` exits it empties those files and writes the output.
+      # $GITHUB_OUTPUT, $GITHUB_ENV, $GITHUB_PATH and $GITHUB_STEP_SUMMARY
+      # from `claude`, and after `claude` exits it empties those files and
+      # writes the output.
       - name: Fix CI (attempt 1)
         id: fix_1
         if: steps.wait_0.outputs.status == 'fix'
@@ -833,7 +844,8 @@ jobs:
           OUTPUT_FILE="$GITHUB_OUTPUT"
           ENV_FILE="$GITHUB_ENV"
           PATH_FILE="$GITHUB_PATH"
-          unset GITHUB_OUTPUT GITHUB_ENV GITHUB_PATH
+          STEP_SUMMARY_FILE="$GITHUB_STEP_SUMMARY"
+          unset GITHUB_OUTPUT GITHUB_ENV GITHUB_PATH GITHUB_STEP_SUMMARY
 
           FAILED_LOGS=$(cat "$LOG_FILE")
 
@@ -864,6 +876,7 @@ jobs:
 
           : > "$ENV_FILE"
           : > "$PATH_FILE"
+          : > "$STEP_SUMMARY_FILE"
           : > "$OUTPUT_FILE"
 
           # With no new commit, the next poll reads the same failed result and
