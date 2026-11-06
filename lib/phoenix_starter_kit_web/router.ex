@@ -34,6 +34,7 @@ defmodule PhoenixStarterKitWeb.Router do
   pipeline :install_webhook do
     plug :accepts, ["json"]
     plug :require_signed_install_webhook
+    plug :allow_peek_iframe
   end
 
   pipeline :widget_api do
