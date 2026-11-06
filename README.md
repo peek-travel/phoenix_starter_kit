@@ -95,6 +95,8 @@ To start using this starter kit:
 
 The setup script creates a `.phoenix_starter_kit_version` file containing the template commit hash. This enables future auto-update capabilities to pull in template improvements.
 
+The setup script also runs `bin/dev-secrets`. It writes `config/dev.secret.exs` with a random dev `secret_key_base` and LiveView signing salt for your app. Git ignores this file. `config/dev.exs` reads it, and runs `bin/dev-secrets` when the file is missing. Production reads `SECRET_KEY_BASE` from the environment.
+
 ## Development Tunnel
 
 ### Local Development
@@ -249,9 +251,10 @@ To customize the starter kit for your specific Peek Pro app:
 
 The `bin/` directory contains several useful scripts:
 
-- **`bin/setup`**: Interactive setup wizard that renames the project, configures deployment platform, installs lefthook git hooks, and creates version tracking file.
+- **`bin/setup`**: Interactive setup wizard that renames the project, configures deployment platform, installs lefthook git hooks, makes the dev secrets, and creates version tracking file.
 - **`bin/dev`**: Sets up and runs a Cloudflare tunnel for development. Automatically creates `{app-name}-dev.peeklabs.com` tunnel.
 - **`bin/server`**: Starts the Phoenix server with IEx for development.
+- **`bin/dev-secrets`**: Writes `config/dev.secret.exs` with a random dev `secret_key_base` and LiveView signing salt when the file is missing. It keeps a file that exists.
 - **`make`**: Runs tests and code quality checks (format, lint, coverage).
 - **`bin/sync`**: Syncs your app configuration with the Peek Pro registry.
 
