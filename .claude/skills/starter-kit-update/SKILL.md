@@ -19,38 +19,34 @@ You are tasked with backporting the latest changes from the `phoenix_starter_kit
    Read `.phoenix_starter_kit_version` — it contains the last backported commit SHA from the starter kit.
 
 3. **Fetch the starter kit commit history.**
-   Use `gh` to get the commit log on `main` from the starter kit repo, starting after the SHA in `.phoenix_starter_kit_version` up to the latest:
+   Read the starter kit history from the local ref `starter-kit/main`. The automated workflow fetches it before this skill runs (its "Fetch phoenix_starter_kit history" step). In an interactive run, fetch it first:
    ```bash
-   # Get current version
-   CURRENT_SHA=$(cat .phoenix_starter_kit_version | tr -d '[:space:]')
-
-   # Get commits after our current version (oldest first)
-   gh api "repos/peek-travel/phoenix_starter_kit/commits?sha=main&per_page=100" \
-     --jq '[.[].sha] | reverse | .[]'
+   git fetch --no-tags https://github.com/peek-travel/phoenix_starter_kit.git +main:refs/remotes/starter-kit/main
    ```
-   Filter commits to only those **after** `$CURRENT_SHA`. If there are no new commits, skip step 5 (there is nothing to backport commit-by-commit) but continue with steps 6 and 7 below — those two sweeps run every time this skill runs, independent of whether phoenix_starter_kit has new commits.
+   Then list the commits after the SHA in `.phoenix_starter_kit_version` up to the latest (oldest first):
+   ```bash
+   git log --reverse --format=%H "$(cat .phoenix_starter_kit_version | tr -d '[:space:]')"..starter-kit/main
+   ```
+   If there are no new commits, skip step 5 (there is nothing to backport commit-by-commit) but continue with steps 6 and 7 below — those two sweeps run every time this skill runs, independent of whether phoenix_starter_kit has new commits.
 
 4. **Review the changelog (if any).**
    Check if the starter kit has a CHANGELOG.md or release notes that provide context for the changes:
    ```bash
-   gh api repos/peek-travel/phoenix_starter_kit/contents/CHANGELOG.md \
-     --jq '.content' | base64 -d 2>/dev/null || echo "No changelog found"
+   git show starter-kit/main:CHANGELOG.md
    ```
-   Use any changelog information to understand the intent behind changes.
+   If that fails, the starter kit has no changelog. Use any changelog information to understand the intent behind changes.
 
 5. **Implement changes commit-by-commit.**
    Skip this step entirely if step 3 found no new commits. For each new commit (in chronological order):
 
    a. **Read the commit diff:**
       ```bash
-      gh api repos/peek-travel/phoenix_starter_kit/commits/<SHA> \
-        --jq '.files[] | "\(.filename)\t\(.status)\t\(.patch // "")"'
+      git show --format= <SHA>
       ```
 
    b. **Read the commit message:**
       ```bash
-      gh api repos/peek-travel/phoenix_starter_kit/commits/<SHA> \
-        --jq '.commit.message'
+      git log -1 --format=%B <SHA>
       ```
 
    c. **Check for downstream instructions in the commit message.**
@@ -153,7 +149,7 @@ You are tasked with backporting the latest changes from the `phoenix_starter_kit
 - Steps 6 (dependency sweep) and 7 (Docker base image check) run on **every** invocation of this skill, even when step 3 finds no new starter kit commits to backport — they catch drift in this project's own extra dependencies and container base image, not just what changed upstream.
 - This skill file itself lives in the starter kit template, so it ships to every project created from it — keep it generically useful, not specific to any one downstream project's quirks.
 - When this skill runs headlessly under `--permission-mode dontAsk`, the harness refuses `Edit`/`Write` on any path under `.claude/` (a self-modification guard) even though `Edit`/`Write` are in `--allowedTools`. If step 11 needs to change this file during such a run, write the new content to `.github/starter-kit-update-SKILL.pending.md` instead — the automated workflow has its own "Land pending SKILL.md self-improvement" step that moves it into place with a plain `git mv` before the branch is pushed, so no manual step is needed. Don't work around the guard with `git apply` or shell redirection, and don't use this workaround outside a headless run — a normal interactive run has no such restriction and should just edit this file directly.
-- Merge commits are often no-ops when both parent branches were already backported individually — check parent SHAs and touched files via the GitHub API before applying; if everything's covered, just advance `.phoenix_starter_kit_version` past the merge SHA instead of re-applying an empty diff.
+- Merge commits are often no-ops when both parent branches were already backported individually — check parent SHAs and touched files with `git show --stat <SHA>` before applying; if everything's covered, just advance `.phoenix_starter_kit_version` past the merge SHA instead of re-applying an empty diff.
 - After bumping Elixir/OTP or a Docker base image version, verify the exact version combination is actually published (e.g. check the registry's tags) before pinning it — registries don't publish every combination. Also re-run `mix compile --warnings-as-errors` after the bump: newer toolchains commonly introduce new compiler/type-checker warnings (e.g. a `cond` clause the type checker now proves is always true) that need fixing as part of the same commit, not deferred.
 - If you're landing a pending `.claude/` self-improvement file by hand (rather than letting the automated workflow's own step do it), `git mv` refuses an untracked source — `git add .github/starter-kit-update-SKILL.pending.md` first, then `git mv -f` it onto the target. Do this yourself whenever the running workflow predates the step that would land it — notably on the very run that backports that workflow step, or any run where `git log` shows no "Land pending SKILL.md self-improvement" step in `.github/workflows/starter-kit-update.yml`. Otherwise the PR merges with a stray pending file and the SKILL.md change never applies.
 - Because the pending-file path replaces this file wholesale, it can silently drop downstream-only additions that upstream doesn't have (e.g. a project-specific step or note a previous run added locally). Before committing a landed pending file, diff it against what was there before and confirm every removal was intended — don't let a legitimate local addition get clobbered by an upstream self-improvement write.

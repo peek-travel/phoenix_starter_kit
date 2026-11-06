@@ -74,7 +74,7 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateJiraStepTest do
       assert index, "no step named #{inspect(@step_name)} in #{@workflow}"
 
       assert Enum.at(names, index - 1) == "      - name: Push branch and open draft PR"
-      assert Enum.at(names, index + 1) == "      - name: Wait for checks, retry fixes on failure"
+      assert Enum.at(names, index + 1) == "      - name: Wait for checks"
 
       assert "        if: github.repository_owner == 'gadabout' && steps.pr.outputs.had_changes == 'true'" in step_lines()
     end
