@@ -14,6 +14,9 @@ on:
       - 'app-sandbox.json'
       - 'docs/app.schema.json'
 
+permissions:
+  contents: read
+
 jobs:
   validate-app-configs:
     runs-on: ubuntu-latest
