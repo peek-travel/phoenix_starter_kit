@@ -58,9 +58,10 @@ if [[ ! -f ".env" ]]; then
   error_exit ".env file not found in project root. Please create it and define PEEK_APP_REGISTRY_URL and PEEK_APP_REGISTRY_AUTH_TOKEN."
 fi
 
-# Print the value of KEY from .env. The file is read as KEY=VALUE lines; it is not run.
+# Print the value of KEY from .env. The file is read as KEY=VALUE lines; it is not run,
+# so ${VAR} references are not expanded.
 # Accepts an optional "export " prefix and single or double quotes around the value.
-# Removes a " # comment" after an unquoted value. The last line for KEY wins.
+# Removes a " # comment" after the value. The last line for KEY wins.
 read_env_value() {
   local key=$1 line value="" found=""
   while IFS= read -r line || [[ -n "$line" ]]; do
@@ -68,7 +69,7 @@ read_env_value() {
     if [[ "$line" =~ ^[[:space:]]*(export[[:space:]]+)?${key}[[:space:]]*=(.*)$ ]]; then
       value="${BASH_REMATCH[2]}"
       value="${value#"${value%%[![:space:]]*}"}"
-      if [[ "$value" =~ ^\"(.*)\"[[:space:]]*(#.*)?$ ]] || [[ "$value" =~ ^\'(.*)\'[[:space:]]*(#.*)?$ ]]; then
+      if [[ "$value" =~ ^\"([^\"]*)\"[[:space:]]*(#.*)?$ ]] || [[ "$value" =~ ^\'([^\']*)\'[[:space:]]*(#.*)?$ ]]; then
         value="${BASH_REMATCH[1]}"
       else
         value="${value%%[[:space:]]#*}"
@@ -81,9 +82,12 @@ read_env_value() {
   return 0
 }
 
+# A value in .env wins over the same variable in the environment.
 log_debug "Reading .env file"
 URL=$(read_env_value PEEK_APP_REGISTRY_URL)
 TOKEN=$(read_env_value PEEK_APP_REGISTRY_AUTH_TOKEN)
+URL=${URL:-$PEEK_APP_REGISTRY_URL}
+TOKEN=${TOKEN:-$PEEK_APP_REGISTRY_AUTH_TOKEN}
 
 # Validate required values
 [[ -z "$URL" ]] && error_exit "Missing PEEK_APP_REGISTRY_URL in .env"
