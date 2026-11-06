@@ -104,6 +104,11 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateSecretsTest do
       end
     end
 
+    test "steps after claude that run git commit or mix run no hooks and no mix.exs of the repo" do
+      assert step_text("Land pending SKILL.md self-improvement") =~ "git -c core.hooksPath=/dev/null commit --no-verify -m"
+      assert "        working-directory: ${{ runner.temp }}" in step("Re-install hex and rebar for the re-synced toolchain")
+    end
+
     test "the checkout keeps no token in .git/config" do
       checkout = step("actions/checkout@v7")
 
@@ -196,6 +201,7 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateSecretsTest do
       env > "$STUB_DIR/claude-env"
       echo "BASH_ENV=/tmp/x" >> "$STUB_DIR/github-env"
       echo "/tmp/x" >> "$STUB_DIR/github-path"
+      echo "summary text" >> "$STUB_DIR/step-summary"
       exit "${CLAUDE_RC:-0}"
       """)
 
@@ -211,12 +217,14 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateSecretsTest do
         assert env =~ "\nANTHROPIC_API_KEY=sk-ant-api03-claude-key-for-the-tests\n"
         refute env =~ "CLAUDE_CODE_OAUTH_TOKEN=", "claude got CLAUDE_CODE_OAUTH_TOKEN"
 
-        for var <- ["CLAUDE_AUTH_VALUE=", "GITHUB_ENV=", "GITHUB_PATH=", "GITHUB_OUTPUT="] do
+        for var <- ["CLAUDE_AUTH_VALUE=", "GITHUB_ENV=", "GITHUB_PATH=", "GITHUB_OUTPUT=", "GITHUB_STEP_SUMMARY="] do
           refute env =~ "\n" <> var, "claude got #{var}"
         end
 
         assert File.read!(Path.join(ctx.dir, "github-env")) == ""
         assert File.read!(Path.join(ctx.dir, "github-path")) == ""
+        assert File.read!(Path.join(ctx.dir, "step-summary")) == ""
+        assert File.read!(Path.join(ctx.dir, "step-summary")) == ""
       end
 
       test "#{name}: sets the OAuth variable for an OAuth token", ctx do
@@ -274,7 +282,7 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateSecretsTest do
   defp run(ctx, script, env) do
     path = Path.join(ctx.dir, "step.sh")
     File.write!(path, script)
-    for file <- ["github-env", "github-path", "output"], do: File.write!(Path.join(ctx.dir, file), "")
+    for file <- ["github-env", "github-path", "output", "step-summary"], do: File.write!(Path.join(ctx.dir, file), "")
 
     env =
       [
@@ -282,6 +290,7 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateSecretsTest do
         GITHUB_OUTPUT: Path.join(ctx.dir, "output"),
         GITHUB_ENV: Path.join(ctx.dir, "github-env"),
         GITHUB_PATH: Path.join(ctx.dir, "github-path"),
+        GITHUB_STEP_SUMMARY: Path.join(ctx.dir, "step-summary"),
         CLAUDE_ALLOWED_TOOLS: "Read",
         CLAUDE_MODEL_ARGS: "",
         ANTHROPIC_API_KEY: nil,

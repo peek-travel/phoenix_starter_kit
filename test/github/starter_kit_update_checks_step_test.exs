@@ -70,6 +70,7 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateChecksStepTest do
   printf '%s' "$2" > "$STUB_DIR/claude-prompt"
   echo "BASH_ENV=/tmp/x" >> "$STUB_DIR/github-env"
   echo "/tmp/x" >> "$STUB_DIR/github-path"
+  echo "summary text" >> "$STUB_DIR/step-summary"
   echo "committed=true" >> "$STUB_DIR/output"
   [ -n "$NO_COMMIT" ] || touch "$STUB_DIR/fixed"
   exit "${CLAUDE_RC:-0}"
@@ -85,7 +86,7 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateChecksStepTest do
       File.chmod!(path, 0o755)
     end
 
-    for file <- ["output", "github-env", "github-path"], do: File.write!(Path.join(dir, file), "")
+    for file <- ["output", "github-env", "github-path", "step-summary"], do: File.write!(Path.join(dir, file), "")
 
     %{dir: dir, bin: bin}
   end
@@ -324,7 +325,16 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateChecksStepTest do
       assert claude_env["ANTHROPIC_API_KEY"] == @claude_key
       refute Map.has_key?(claude_env, "CLAUDE_CODE_OAUTH_TOKEN"), "claude got CLAUDE_CODE_OAUTH_TOKEN"
 
-      for name <- ["CLAUDE_AUTH_VALUE", "GH_TOKEN", "CHECKS_READ_TOKEN", "SLACK_WEBHOOK_URL", "GITHUB_OUTPUT", "GITHUB_ENV", "GITHUB_PATH"] do
+      for name <- [
+            "CLAUDE_AUTH_VALUE",
+            "GH_TOKEN",
+            "CHECKS_READ_TOKEN",
+            "SLACK_WEBHOOK_URL",
+            "GITHUB_OUTPUT",
+            "GITHUB_ENV",
+            "GITHUB_PATH",
+            "GITHUB_STEP_SUMMARY"
+          ] do
         refute Map.has_key?(claude_env, name), "claude got #{name}"
       end
 
@@ -344,6 +354,7 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateChecksStepTest do
 
       assert File.read!(Path.join(ctx.dir, "github-env")) == ""
       assert File.read!(Path.join(ctx.dir, "github-path")) == ""
+      assert File.read!(Path.join(ctx.dir, "step-summary")) == ""
       assert read_output(ctx) == "committed=false\n"
     end
 
@@ -484,6 +495,7 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateChecksStepTest do
         GITHUB_OUTPUT: Path.join(ctx.dir, "output"),
         GITHUB_ENV: Path.join(ctx.dir, "github-env"),
         GITHUB_PATH: Path.join(ctx.dir, "github-path"),
+        GITHUB_STEP_SUMMARY: Path.join(ctx.dir, "step-summary"),
         BRANCH: "chore/update-1",
         REPO: "gadabout/acme-wallets-app",
         GH_TOKEN: nil,
