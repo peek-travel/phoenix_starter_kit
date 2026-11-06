@@ -11,9 +11,15 @@ defmodule PhoenixStarterKitWeb.LocalDevTools do
     * An error returns a plain status text, not the Plug.Debugger page.
     * The code reloader's compile-error page returns a plain status text.
     * The LiveDashboard LiveView does not mount over the `/live` socket
-      (`on_mount/4`).
+      (`on_mount/4`). The socket sees only `x-` headers; cloudflared and ngrok
+      always add `x-forwarded-for`.
+    * The router's `/dev` scope also uses this module as a plug, after the
+      router has decoded the path.
 
   A request with none of these headers works as before.
+
+  For a proxied request, each 500 HTML response becomes plain text, because the
+  code reloader's page cannot be told apart from other 500 HTML pages.
 
   The endpoint uses this module only in dev:
 
@@ -23,6 +29,8 @@ defmodule PhoenixStarterKitWeb.LocalDevTools do
 
   Put it after `use Phoenix.Endpoint`.
   """
+
+  @behaviour Plug
 
   import Plug.Conn
 
@@ -56,6 +64,17 @@ defmodule PhoenixStarterKitWeb.LocalDevTools do
   """
   def proxied?(%Plug.Conn{req_headers: headers}), do: proxied?(headers)
   def proxied?(headers) when is_list(headers), do: Enum.any?(headers, fn {name, _} -> name in @proxy_headers end)
+
+  @impl Plug
+  def init(opts), do: opts
+
+  @doc """
+  Plug for a router scope. Returns 404 for a proxied request.
+  """
+  @impl Plug
+  def call(conn, _opts) do
+    if proxied?(conn), do: conn |> send_plain(404) |> halt(), else: conn
+  end
 
   @doc false
   def call_outer(conn, next) do
@@ -96,7 +115,8 @@ defmodule PhoenixStarterKitWeb.LocalDevTools do
     end
   end
 
-  defp local_only_path?(%Plug.Conn{path_info: [segment | _]}), do: segment in @local_only_segments
+  # Decode the segment as Phoenix.Router does, so "/%64ev" matches "dev".
+  defp local_only_path?(%Plug.Conn{path_info: [segment | _]}), do: URI.decode(segment) in @local_only_segments
   defp local_only_path?(_conn), do: false
 
   # Phoenix.CodeReloader sends a 500 HTML page with the compiler output.

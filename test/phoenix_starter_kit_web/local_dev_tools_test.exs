@@ -20,6 +20,8 @@ defmodule PhoenixStarterKitWeb.LocalDevToolsTest do
       Phoenix.CodeReloader.call(conn, reloader: fn _endpoint, _opts -> {:error, "compiler output"} end)
     end
 
+    def call(_conn, :bad_request), do: raise(Plug.BadRequestError)
+
     def call(conn, :json_error) do
       conn |> put_resp_content_type("application/json") |> send_resp(500, ~s({"error":"json"}))
     end
@@ -27,6 +29,15 @@ defmodule PhoenixStarterKitWeb.LocalDevToolsTest do
 
   defmodule Router do
     use Phoenix.Router
+
+    pipeline :local_dev_tools do
+      plug PhoenixStarterKitWeb.LocalDevTools
+    end
+
+    scope "/tools" do
+      pipe_through :local_dev_tools
+      get "/page", Actions, :ok
+    end
 
     get "/", Actions, :ok
     get "/devices", Actions, :ok
@@ -38,6 +49,7 @@ defmodule PhoenixStarterKitWeb.LocalDevToolsTest do
     get "/send-then-raise", Actions, :send_then_raise
     get "/compile-error", Actions, :compile_error
     get "/json-error", Actions, :json_error
+    get "/bad-request", Actions, :bad_request
   end
 
   Application.put_env(:phoenix_starter_kit, __MODULE__.Endpoint,
@@ -48,6 +60,7 @@ defmodule PhoenixStarterKitWeb.LocalDevToolsTest do
   )
 
   defmodule Endpoint do
+    use Sentry.PlugCapture
     use Phoenix.Endpoint, otp_app: :phoenix_starter_kit
     use PhoenixStarterKitWeb.LocalDevTools
 
@@ -81,6 +94,22 @@ defmodule PhoenixStarterKitWeb.LocalDevToolsTest do
 
       conn = post(proxied_conn(), "/__plug__/debugger/action", %{"encoded_handler" => "x"})
       assert conn.status == 404
+    end
+
+    test "get 404 for a percent-encoded local-only path" do
+      assert get(proxied_conn(), "/%64ev/dashboard").status == 404
+      assert get(proxied_conn(), "/%74idewave/mcp").status == 404
+    end
+
+    test "get 404 from the router plug" do
+      conn = get(proxied_conn(), "/tools/page")
+      assert conn.status == 404
+      assert conn.resp_body == "Not Found"
+    end
+
+    test "get the plain status of a 4xx error" do
+      {400, _headers, body} = assert_error_sent(400, fn -> get(proxied_conn(), "/bad-request") end)
+      assert body == "Bad Request"
     end
 
     test "each forwarding header marks the request as proxied" do
@@ -131,6 +160,17 @@ defmodule PhoenixStarterKitWeb.LocalDevToolsTest do
     test "reach the local-only paths" do
       for path <- ["/tidewave/mcp", "/dev/dashboard", "/phoenix/live_reload/frame"] do
         assert get(build_conn(), path).resp_body == "ok", path
+      end
+    end
+
+    test "pass the router plug" do
+      assert get(build_conn(), "/tools/page").resp_body == "ok"
+    end
+
+    test "reach the Plug.Debugger action path" do
+      # Plug.Debugger gets the request and refuses the unsigned handler.
+      assert_raise RuntimeError, ~r/could not run Plug.Debugger action/, fn ->
+        post(build_conn(), "/__plug__/debugger/action", %{"encoded_handler" => "x"})
       end
     end
 

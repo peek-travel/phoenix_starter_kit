@@ -123,8 +123,12 @@ defmodule PhoenixStarterKitWeb.Router do
     # as long as you are also using SSL (which you should anyway).
     import Phoenix.LiveDashboard.Router
 
+    pipeline :local_dev_tools do
+      plug PhoenixStarterKitWeb.LocalDevTools
+    end
+
     scope "/dev" do
-      pipe_through :browser
+      pipe_through [:local_dev_tools, :browser]
 
       live_dashboard "/dashboard",
         metrics: PhoenixStarterKitWeb.Telemetry,
