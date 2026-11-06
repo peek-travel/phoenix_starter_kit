@@ -142,6 +142,38 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateSecretsTest do
     end
   end
 
+  describe "the skill" do
+    @skill ".claude/skills/starter-kit-update/SKILL.md"
+
+    test "reads the upstream history with git, not gh" do
+      refute File.read!(@skill) =~ "gh api"
+    end
+
+    # The automated run skips step 1 (`git checkout -b`) and step 10
+    # (`git push`), and the workflow does the `git fetch`.
+    test "uses only git subcommands that the allowlist has" do
+      tools = allowed_tools()
+
+      subcommands =
+        ~r/```bash\n(.*?)```/s
+        |> Regex.scan(File.read!(@skill), capture: :all_but_first)
+        |> Enum.flat_map(fn [block] -> Regex.scan(~r/\bgit ([a-z-]+)/, block, capture: :all_but_first) end)
+        |> Enum.map(&hd/1)
+        |> Enum.uniq()
+
+      assert "log" in subcommands and "show" in subcommands
+
+      for sub <- subcommands -- ~w(checkout fetch push) do
+        assert "Bash(git #{sub}:*)" in tools, "the skill runs git #{sub}, but the allowlist does not have it"
+      end
+    end
+
+    test "the upstream fetch runs before the backport step" do
+      names = Enum.map(steps(), &elem(&1, 0))
+      assert Enum.find_index(names, &(&1 == "Fetch phoenix_starter_kit history")) < Enum.find_index(names, &(&1 == @backport_step))
+    end
+  end
+
   describe "the Claude Code version" do
     test "is one fixed version, in the install and in the cache key" do
       assert [_, version] = Regex.run(~r/^      CLAUDE_CODE_VERSION: (\S+)$/m, File.read!(@workflow))
