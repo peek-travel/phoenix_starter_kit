@@ -48,14 +48,15 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateChecksStepTest do
 
   # Records each call with the git config that the env gives it. HEAD is
   # def456 after `claude` made a commit (the "fixed" file), else abc123.
-  # `push` fails when $PUSH_FAIL is set.
+  # `diff` prints $WORKFLOW_DIFF. `push` fails when $PUSH_FAIL is set.
   @git_stub ~S"""
   #!/usr/bin/env bash
   printf '%s\n' "$*" >> "$STUB_DIR/git-calls"
-  env | grep '^GIT_CONFIG' | sort > "$STUB_DIR/git-env"
+  env | grep -E '^GIT_CONFIG_(COUNT|GLOBAL|NOSYSTEM|KEY|VALUE)' | sort > "$STUB_DIR/git-env"
   if [ "$1" = "rev-parse" ]; then
     if [ -e "$STUB_DIR/fixed" ]; then echo def456; else echo abc123; fi
   fi
+  if [ "$1" = "diff" ]; then printf '%s' "$WORKFLOW_DIFF"; fi
   if [ "$1" = "push" ] && [ -n "$PUSH_FAIL" ]; then exit 1; fi
   exit 0
   """
@@ -154,6 +155,10 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateChecksStepTest do
         assert "          LOG_FILE: ${{ steps.#{wait}.outputs.log }}" in step_lines(name)
       end
 
+      for {name, wait} <- [{@push_step, "wait_0"}, {"Push fix (attempt 2)", "wait_1"}] do
+        assert "          CURRENT_SHA: ${{ steps.#{wait}.outputs.sha }}" in step_lines(name)
+      end
+
       assert "          LAST_STATUS: ${{ steps.wait_2.outputs.status || steps.wait_1.outputs.status || steps.wait_0.outputs.status }}" in step_lines(
                "CI result"
              )
@@ -164,8 +169,14 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateChecksStepTest do
         assert ("          " <> line) in step_lines(@wait_step)
       end
 
-      assert "          BRANCH: ${{ steps.branch.outputs.name }}" in step_lines(@push_step)
-      assert "          REPO: ${{ github.repository }}" in step_lines(@push_step)
+      for line <- [
+            "BRANCH: ${{ steps.branch.outputs.name }}",
+            "REPO: ${{ github.repository }}",
+            "GIT_CONFIG_SHA: ${{ steps.git_state.outputs.config_sha }}"
+          ] do
+        assert ("          " <> line) in step_lines(@push_step)
+        assert ("          " <> line) in step_lines("Push fix (attempt 2)")
+      end
 
       for name <- [@wait_step, @fix_step, @push_step], do: refute(step_script(name) =~ "${{")
     end
@@ -244,8 +255,12 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateChecksStepTest do
       assert File.read!(log) == "log of run 101\n"
 
       assert Enum.all?(gh_calls(ctx), &String.starts_with?(&1, @read_token <> " "))
-      assert "#{@read_token} run list --branch chore/update-1 --limit 100 --json databaseId,conclusion,headSha" in gh_calls(ctx)
-      assert "#{@read_token} run view 101 --log-failed" in gh_calls(ctx)
+
+      assert "#{@read_token} run list --repo gadabout/acme-wallets-app --branch chore/update-1 --limit 100 --json databaseId,conclusion,headSha" in gh_calls(
+               ctx
+             )
+
+      assert "#{@read_token} run view 101 --repo gadabout/acme-wallets-app --log-failed" in gh_calls(ctx)
       refute Enum.any?(gh_calls(ctx), &(&1 =~ "run view 102"))
       refute Enum.any?(gh_calls(ctx), &(&1 =~ "run view 103"))
     end
@@ -353,12 +368,22 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateChecksStepTest do
   end
 
   describe "push" do
+    setup ctx do
+      File.mkdir_p!(Path.join([ctx.dir, "repo", ".git", "hooks"]))
+      :ok
+    end
+
     test "pushes HEAD to the branch with the token in a masked header, not on the command line", ctx do
       {out, 0} = run_push(ctx)
 
       header = "AUTHORIZATION: basic " <> Base.encode64("x-access-token:" <> @bot_token)
       assert out =~ "::add-mask::#{header}"
-      assert git_calls(ctx) == ["push --no-verify https://github.com/gadabout/acme-wallets-app.git HEAD:refs/heads/chore/update-1"]
+
+      assert git_calls(ctx) == [
+               "diff --name-only abc123 HEAD -- .github/workflows",
+               "push --no-verify https://github.com/gadabout/acme-wallets-app.git HEAD:refs/heads/chore/update-1"
+             ]
+
       refute Enum.any?(git_calls(ctx), &(&1 =~ @bot_token))
 
       assert File.read!(Path.join(ctx.dir, "git-env")) ==
@@ -380,6 +405,37 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateChecksStepTest do
 
       assert out =~ "::error::git push failed after fix attempt 1"
       assert read_output(ctx) == "pushed=false\n"
+    end
+
+    test "does not push a fix that changes a workflow file", ctx do
+      {out, 0} = run_push(ctx, WORKFLOW_DIFF: ".github/workflows/elixir.yml\n")
+
+      assert out =~ "::error::Fix attempt 1 changed a file in .github/workflows. The job does not push it."
+      refute Enum.any?(git_calls(ctx), &String.starts_with?(&1, "push"))
+      assert read_output(ctx) == "pushed=false\n"
+    end
+
+    test "stops before git runs when .git/config changed", ctx do
+      {out, 1} = run_push(ctx, GIT_CONFIG_SHA: "another-sha")
+
+      assert out =~ "::error::.git/config or .git/hooks changed after the Claude steps started."
+      assert git_calls(ctx) == []
+      refute out =~ @bot_token
+    end
+
+    test "stops before git runs when .git/hooks has a hook", ctx do
+      File.write!(Path.join([ctx.dir, "repo", ".git", "hooks", "pre-push"]), "#!/bin/sh\n")
+      {out, 1} = run_push(ctx)
+
+      assert out =~ "::error::.git/config or .git/hooks changed after the Claude steps started."
+      assert git_calls(ctx) == []
+    end
+
+    test "accepts the sample hooks that git makes", ctx do
+      File.write!(Path.join([ctx.dir, "repo", ".git", "hooks", "pre-push.sample"]), "#!/bin/sh\n")
+
+      {_out, 0} = run_push(ctx)
+      assert read_output(ctx) == "pushed=true\n"
     end
   end
 
@@ -403,12 +459,21 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateChecksStepTest do
 
   defp run_fix(ctx), do: run_fix(ctx, [])
 
-  defp run_push(ctx, overrides \\ []), do: run(ctx, @push_step, [GH_TOKEN: @bot_token, ATTEMPT: "1"], overrides)
+  # Runs in the "repo" folder, with a .git/config.
+  defp run_push(ctx, overrides \\ []) do
+    repo = Path.join(ctx.dir, "repo")
+    config = Path.join([repo, ".git", "config"])
+    unless File.exists?(config), do: File.write!(config, "[core]\n\tbare = false\n")
+    sha = :sha256 |> :crypto.hash(File.read!(config)) |> Base.encode16(case: :lower)
+
+    env = [GH_TOKEN: @bot_token, GIT_CONFIG_SHA: sha, CURRENT_SHA: "abc123", ATTEMPT: "1", WORKFLOW_DIFF: ""]
+    run(ctx, @push_step, env, overrides, cd: repo)
+  end
 
   # Runs the step's script the way GitHub does (`bash -e`), with the env
   # the test gives it and the runner's file-command files. It unsets the
   # tokens and keys that the env of the test run can have.
-  defp run(ctx, step, env, overrides) do
+  defp run(ctx, step, env, overrides, opts \\ []) do
     script = Path.join(ctx.dir, "step.sh")
     File.write!(script, step_script(step))
 
@@ -440,7 +505,7 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateChecksStepTest do
       |> Keyword.merge(overrides)
       |> Enum.map(fn {key, value} -> {Atom.to_string(key), value} end)
 
-    System.cmd("bash", ["-e", script], env: env, stderr_to_stdout: true)
+    System.cmd("bash", ["-e", script], [env: env, stderr_to_stdout: true] ++ opts)
   end
 
   defp read_output(ctx), do: File.read!(Path.join(ctx.dir, "output"))

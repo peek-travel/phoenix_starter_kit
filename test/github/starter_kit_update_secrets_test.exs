@@ -87,6 +87,23 @@ defmodule PhoenixStarterKit.Github.StarterKitUpdateSecretsTest do
       end
     end
 
+    test "the steps that give the bot token to git check .git/config first" do
+      names = Enum.map(steps(), &elem(&1, 0))
+      record = Enum.find_index(names, &(&1 == "Record git config"))
+      assert record < Enum.find_index(names, &(&1 == @backport_step))
+      assert "        run: echo \"config_sha=$(sha256sum .git/config | cut -d' ' -f1)\" >> \"$GITHUB_OUTPUT\"" in step("Record git config")
+
+      for name <- ["Push branch and open draft PR", "Push fix (attempt 1)"] do
+        script = step_script(name)
+        assert "          GIT_CONFIG_SHA: ${{ steps.git_state.outputs.config_sha }}" in step(name)
+
+        {guard, _} = :binary.match(script, ~s(!= "$GIT_CONFIG_SHA"))
+        {first_git, _} = Regex.run(~r/^\s*(if )?git /m, script, return: :index) |> hd()
+        assert guard < first_git, "#{name} runs git before it checks .git/config"
+        assert script =~ "export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1"
+      end
+    end
+
     test "the checkout keeps no token in .git/config" do
       checkout = step("actions/checkout@v7")
 
