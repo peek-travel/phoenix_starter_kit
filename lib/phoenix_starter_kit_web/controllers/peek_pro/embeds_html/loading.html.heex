@@ -7,34 +7,15 @@
     <title>Activating...</title>
     <script>
       setTimeout(function() {
-        // Create a form and submit it
-        var form = document.createElement('form');
-        form.method = 'POST';
-        form.action = '<%= @redirect_url %>';
-
-        // Add CSRF token if needed
-        var csrfToken = document.querySelector("meta[name='csrf-token']")?.getAttribute("content");
-        if (csrfToken) {
-          var csrfInput = document.createElement('input');
-          csrfInput.type = 'hidden';
-          csrfInput.name = '_csrf_token';
-          csrfInput.value = csrfToken;
-          form.appendChild(csrfInput);
-        }
-
-        // Add attempt parameter
-        var attemptInput = document.createElement('input');
-        attemptInput.type = 'hidden';
-        attemptInput.name = 'attempt';
-        attemptInput.value = '<%= @next_attempt %>';
-        form.appendChild(attemptInput);
-
-        document.body.appendChild(form);
-        form.submit();
+        document.getElementById("retry-form").submit();
       }, 5000);
     </script>
   </head>
   <body class="bg-white">
+    <form id="retry-form" method="post" action={@redirect_url} class="hidden">
+      <input type="hidden" name="attempt" value={@next_attempt} />
+      <input :if={@peek_auth} type="hidden" name="peek-auth" value={@peek_auth} />
+    </form>
     <div class="flex flex-col items-center justify-center h-screen">
       <div class="flex items-center space-x-2 mb-4">
         <!-- Tailwind spinner animation -->
