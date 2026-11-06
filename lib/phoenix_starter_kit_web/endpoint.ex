@@ -2,6 +2,12 @@ defmodule PhoenixStarterKitWeb.Endpoint do
   use Sentry.PlugCapture
   use Phoenix.Endpoint, otp_app: :phoenix_starter_kit
 
+  # Dev tools answer local requests only, not requests through bin/dev or ngrok.
+  # See PhoenixStarterKitWeb.LocalDevTools.
+  if Application.compile_env(:phoenix_starter_kit, :dev_routes) do
+    use PhoenixStarterKitWeb.LocalDevTools
+  end
+
   # The session will be stored in the cookie and signed,
   # this means its contents can be read but not tampered with.
   # Set :encryption_salt if you would also like to encrypt it.
@@ -20,9 +26,10 @@ defmodule PhoenixStarterKitWeb.Endpoint do
   # LiveView's channel join then crashes on Map.merge(nil, verified_session).
   # All auth data is passed via live_session_data/1 → the phx-session HTML
   # token, which is cookie-independent. See PartnerUserAuth for details.
+  # :x_headers lets PhoenixStarterKitWeb.LocalDevTools.on_mount/4 see forwarding headers.
   socket "/live", Phoenix.LiveView.Socket,
-    websocket: [connect_info: []],
-    longpoll: [connect_info: []]
+    websocket: [connect_info: [:x_headers]],
+    longpoll: [connect_info: [:x_headers]]
 
   # Serve at "/" the static files from "priv/static" directory.
   #

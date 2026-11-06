@@ -207,6 +207,24 @@ Your app will be available at `https://phoenix-starter-kit-dev.peeklabs.com` (or
 
 **Multiple projects:** Each app gets its own tunnel config, so you can run multiple projects simultaneously on different ports.
 
+### Local-only dev tools
+
+In dev, these tools answer only requests made directly to `localhost`. A request through the tunnel (`bin/dev`
+or ngrok) gets a 404 or a plain error text:
+
+| Tool | Path or behavior |
+|------|------------------|
+| Tidewave | `/tidewave/*` |
+| LiveDashboard | `/dev/dashboard` (HTTP and the `/live` socket) |
+| Swoosh mailbox preview | `/dev/mailbox` |
+| Plug.Debugger error pages and actions | error pages, `/__plug__/*` |
+| Code reloader compile-error page | 500 page with the compiler output |
+| Live reload | `/phoenix/live_reload/*` |
+
+A request counts as tunneled when it has one of these headers: `cf-connecting-ip`, `cf-ray`, `forwarded`,
+`x-forwarded-for`, `x-forwarded-host`. The app pages work through the tunnel as before. Live reload does not
+work through the tunnel; reload the page by hand. See `PhoenixStarterKitWeb.LocalDevTools`.
+
 ## `bin/sync app.json` (Experimental)
 
 Running `bin/sync app.json` requires `PEEK_APP_REGISTRY_URL` and `PEEK_APP_REGISTRY_AUTH_TOKEN` values.

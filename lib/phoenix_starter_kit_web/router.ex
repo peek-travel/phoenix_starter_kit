@@ -126,7 +126,10 @@ defmodule PhoenixStarterKitWeb.Router do
     scope "/dev" do
       pipe_through :browser
 
-      live_dashboard "/dashboard", metrics: PhoenixStarterKitWeb.Telemetry
+      live_dashboard "/dashboard",
+        metrics: PhoenixStarterKitWeb.Telemetry,
+        on_mount: [{PhoenixStarterKitWeb.LocalDevTools, :local_only}]
+
       forward "/mailbox", Plug.Swoosh.MailboxPreview
     end
   end
