@@ -27,6 +27,19 @@ defmodule PhoenixStarterKit.Platforms.PeekProTest do
                PeekPro.query(partner, "query TestQuery { test }", %{"foo" => "bar"})
     end
 
+    @tag skip: "needs a peek_app_sdk version with the registry host check in query_platform/4"
+    test "sends no request when api_config.url is not a registry host" do
+      partner = %Partner{
+        platform: :peek,
+        app_registry_installation_refid: "install-123",
+        api_config: %Partner.ApiConfig{url: "https://other-host.example.com"}
+      }
+
+      reject(Tesla, :request, 2)
+
+      assert {:error, :host_not_allowed} = PeekPro.query(partner, "query TestQuery { test }", %{})
+    end
+
     test "calls PeekPro directly when api_config.url is nil" do
       partner = %Partner{
         platform: :peek,

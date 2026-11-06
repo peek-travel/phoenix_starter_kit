@@ -42,8 +42,8 @@ The application exposes several API endpoints:
 
 1. **Registry API Endpoints**:
 
-   - `/registry/api/on-installation-status-change`: Handles app installation events
-   - `/peek-pro/api/on-booking-change`: Processes booking change notifications from Peek Pro
+   - `/registry/api/on-installation-status-change`: Handles app installation events. It returns 401 and changes no data unless the `X-Peek-Auth: Bearer <token>` header has a valid token for the body `install_id`.
+   - `/peek-pro/api/on-booking-change`: Processes booking change notifications from Peek Pro. It returns 401 without a valid token.
 
 2. **Health Check Endpoint**:
    - `/health`: Provides health status information about the application

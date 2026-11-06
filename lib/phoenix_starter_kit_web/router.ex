@@ -29,6 +29,14 @@ defmodule PhoenixStarterKitWeb.Router do
     plug :allow_peek_iframe
   end
 
+  # The registry signs each install webhook. The plug sends 401 and halts when the
+  # X-Peek-Auth header has no valid token for the body install_id.
+  pipeline :install_webhook do
+    plug :accepts, ["json"]
+    plug :require_signed_install_webhook
+    plug :allow_peek_iframe
+  end
+
   pipeline :widget_api do
     plug :accepts, ["json"]
     plug :set_peek_install_id_from_client
@@ -76,7 +84,7 @@ defmodule PhoenixStarterKitWeb.Router do
   end
 
   scope "/registry/api", PhoenixStarterKitWeb.Registry do
-    pipe_through [:webhook]
+    pipe_through [:install_webhook]
 
     post "/on-installation-status-change", WebhookController, :on_installation_status_change
   end
