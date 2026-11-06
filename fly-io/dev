@@ -169,7 +169,13 @@ check_authentication() {
 find_tunnel_uuid() {
     local tunnel_name=$1
 
-    cloudflared tunnel list | awk -v name="$tunnel_name" '$2 == name { print $1; exit }'
+    local tunnels
+    if ! tunnels=$(cloudflared tunnel list); then
+        print_error "Could not list the Cloudflare tunnels (cloudflared tunnel list failed)." >&2
+        return 1
+    fi
+
+    awk -v name="$tunnel_name" '$2 == name { print $1; exit }' <<< "$tunnels"
 }
 
 # Function to create tunnel (only if it doesn't exist).
@@ -179,7 +185,7 @@ create_tunnel() {
     local app_name=$1
     local tunnel_name="${app_name}-dev"
     local tunnel_uuid
-    tunnel_uuid=$(find_tunnel_uuid "$tunnel_name")
+    tunnel_uuid=$(find_tunnel_uuid "$tunnel_name") || exit 1
 
     if [ -n "$tunnel_uuid" ]; then
         print_success "Tunnel '$tunnel_name' already exists in Cloudflare account"
@@ -201,6 +207,7 @@ create_tunnel() {
 
     print_status "Creating tunnel: $tunnel_name"
     cloudflared tunnel create "$tunnel_name"
+    TUNNEL_CREATED=true
     print_success "Tunnel '$tunnel_name' created successfully"
 }
 
@@ -292,9 +299,16 @@ setup_dns() {
 
     print_status "Setting up DNS routing for $hostname"
 
+    # A tunnel that this run created gets --overwrite-dns: an old DNS record for the
+    # hostname can point to a tunnel that no longer exists.
+    local route_args=()
+    if [ "${TUNNEL_CREATED:-}" = "true" ]; then
+        route_args=(--overwrite-dns)
+    fi
+
     # Check if DNS record already exists by trying to route it
     # If it fails, it might already exist, so we'll just continue
-    if cloudflared tunnel route dns "$tunnel_name" "$hostname" 2>/dev/null; then
+    if cloudflared tunnel route dns "${route_args[@]}" "$tunnel_name" "$hostname" 2>/dev/null; then
         print_success "DNS routing created for $hostname"
         echo ""
         print_warning "IMPORTANT: For development, disable Cloudflare caching!"
@@ -454,5 +468,7 @@ main() {
     run_tunnel "$APP_NAME"
 }
 
-# Run main function
-main "$@"
+# Run main function (not when the file is sourced, for example by a test)
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main "$@"
+fi
