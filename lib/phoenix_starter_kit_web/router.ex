@@ -35,10 +35,6 @@ defmodule PhoenixStarterKitWeb.Router do
     plug PhoenixStarterKitWeb.Plugs.CORS
   end
 
-  pipeline :demo do
-    plug PhoenixStarterKitWeb.Demo.DemoRoutes
-  end
-
   pipeline :peek_pro_embed do
     plug :accepts, ["html"]
     plug :fetch_session
@@ -104,8 +100,13 @@ defmodule PhoenixStarterKitWeb.Router do
   end
 
   # The demo pages run only when `config :phoenix_starter_kit, :demo_routes` is true (dev and test).
+  # Remove this pipeline together with the /demo scope below.
+  pipeline :demo do
+    plug PhoenixStarterKitWeb.Demo.DemoRoutes
+  end
+
   scope "/demo", PhoenixStarterKitWeb.Demo, as: :demo do
-    pipe_through [:browser, :demo]
+    pipe_through [:demo, :browser]
 
     live_session :demo,
       layout: {PhoenixStarterKitWeb.Layouts, :demo},
