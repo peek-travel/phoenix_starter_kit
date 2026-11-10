@@ -50,7 +50,7 @@ config :esbuild,
 
 # Configure tailwind (the version is required)
 config :tailwind,
-  version: "4.3.3",
+  version: "4.3.5",
   phoenix_starter_kit: [
     args: ~w(
       --input=assets/css/app.css
