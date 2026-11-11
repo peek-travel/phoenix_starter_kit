@@ -71,6 +71,9 @@ config :phoenix_starter_kit, PhoenixStarterKitWeb.Endpoint,
 # Enable dev routes for dashboard and mailbox
 config :phoenix_starter_kit, dev_routes: true
 
+# Turn on the /demo pages (see PhoenixStarterKitWeb.Demo.DemoRoutes)
+config :phoenix_starter_kit, demo_routes: true
+
 # Do not include metadata nor timestamps in development logs
 config :logger, :default_formatter, format: "[$level] $message\n"
 

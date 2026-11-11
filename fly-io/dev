@@ -165,62 +165,57 @@ check_authentication() {
     fi
 }
 
-# Function to delete DNS route for a tunnel
-delete_dns_route() {
-    local app_name=$1
-    local hostname="${app_name}-dev.peeklabs.com"
+# Function to print the UUID of the tunnel whose name is exactly $1 (empty if none)
+find_tunnel_uuid() {
+    local tunnel_name=$1
 
-    print_status "Cleaning up old DNS route for $hostname..."
-    # Try to delete the DNS route - it's okay if it fails (might not exist)
-    if cloudflared tunnel route dns delete "$hostname" 2>/dev/null; then
-        print_success "Old DNS route deleted"
-    else
-        print_status "No existing DNS route to delete (this is normal)"
+    local tunnels
+    if ! tunnels=$(cloudflared tunnel list); then
+        print_error "Could not list the Cloudflare tunnels (cloudflared tunnel list failed)." >&2
+        return 1
     fi
+
+    awk -v name="$tunnel_name" '$2 == name { print $1; exit }' <<< "$tunnels"
 }
 
-# Function to create tunnel (only if it doesn't exist or we don't have credentials)
+# Function to create tunnel (only if it doesn't exist).
+# This function never deletes a tunnel. If the tunnel exists but this machine has no
+# credentials file for it, it stops and tells the developer how to get the file.
 create_tunnel() {
     local app_name=$1
     local tunnel_name="${app_name}-dev"
+    local tunnel_uuid
+    tunnel_uuid=$(find_tunnel_uuid "$tunnel_name") || exit 1
 
-    # Check if tunnel already exists in Cloudflare
-    if cloudflared tunnel list | grep -q "$tunnel_name"; then
+    if [ -n "$tunnel_uuid" ]; then
         print_success "Tunnel '$tunnel_name' already exists in Cloudflare account"
 
-        # Check if we have the credentials file locally
-        local tunnel_uuid
-        tunnel_uuid=$(cloudflared tunnel list | grep "$tunnel_name" | awk '{print $1}')
         local credentials_file="$HOME/.cloudflared/${tunnel_uuid}.json"
 
         if [ -f "$credentials_file" ]; then
             print_success "Credentials file found locally - reusing existing tunnel"
             return 0
-        else
-            print_warning "Tunnel exists but credentials file not found locally"
-            print_status "This tunnel was likely created by another developer or on another machine."
-            print_status "Deleting and recreating tunnel to get new credentials..."
-
-            # Delete the DNS route first (it points to the old tunnel UUID)
-            delete_dns_route "$app_name"
-
-            # Now delete the tunnel
-            cloudflared tunnel delete "$tunnel_name"
-            print_success "Old tunnel deleted"
         fi
+
+        print_error "Tunnel '$tunnel_name' exists, but this machine has no credentials file for it."
+        print_status "This script does not delete or replace an existing tunnel."
+        print_status "To use it, copy ${tunnel_uuid}.json from the machine that created the tunnel to:"
+        print_status "    $credentials_file"
+        print_status "Or ask the owner of the tunnel to delete it, then run this script again."
+        exit 1
     fi
 
     print_status "Creating tunnel: $tunnel_name"
     cloudflared tunnel create "$tunnel_name"
+    TUNNEL_CREATED=true
     print_success "Tunnel '$tunnel_name' created successfully"
 }
 
 # Function to get tunnel UUID
 get_tunnel_uuid() {
     local app_name=$1
-    local tunnel_name="${app_name}-dev"
 
-    cloudflared tunnel list | grep "$tunnel_name" | awk '{print $1}'
+    find_tunnel_uuid "${app_name}-dev"
 }
 
 # Function to handle old config.yml file
@@ -304,9 +299,16 @@ setup_dns() {
 
     print_status "Setting up DNS routing for $hostname"
 
+    # A tunnel that this run created gets --overwrite-dns: an old DNS record for the
+    # hostname can point to a tunnel that no longer exists.
+    local route_args=()
+    if [ "${TUNNEL_CREATED:-}" = "true" ]; then
+        route_args=(--overwrite-dns)
+    fi
+
     # Check if DNS record already exists by trying to route it
     # If it fails, it might already exist, so we'll just continue
-    if cloudflared tunnel route dns "$tunnel_name" "$hostname" 2>/dev/null; then
+    if cloudflared tunnel route dns "${route_args[@]}" "$tunnel_name" "$hostname" 2>/dev/null; then
         print_success "DNS routing created for $hostname"
         echo ""
         print_warning "IMPORTANT: For development, disable Cloudflare caching!"
@@ -466,5 +468,7 @@ main() {
     run_tunnel "$APP_NAME"
 }
 
-# Run main function
-main "$@"
+# Run main function (not when the file is sourced, for example by a test)
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main "$@"
+fi
