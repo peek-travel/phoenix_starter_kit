@@ -13,6 +13,9 @@ defmodule PhoenixStarterKitWeb.Registry.WebhookController do
   Handles the installation status change webhook from the App Registry.
 
   This webhook is sent when the installation status of the app changes.
+  The `:install_webhook` pipeline lets the request through only when the
+  `X-Peek-Auth` header has a valid token for the body `install_id`; otherwise
+  it sends a 401 and the app changes no data.
   It updates the partner record in the database with the new status and
   version information and is where you can update anything specific that you
   want to have happen when the app is installed or uninstalled;
@@ -96,15 +99,10 @@ defmodule PhoenixStarterKitWeb.Registry.WebhookController do
   do whatever else you need to do when a booking changes.
 
   Notice that we use the `peek_install_id` to look up the partner, this is set
-  w/ a plug after authenticating the request.
+  w/ a plug after authenticating the request. A request without a valid token
+  has no `peek_install_id` and gets a 401.
   """
-  def on_booking_change(conn, params) do
-    %{
-      assigns: %{
-        peek_install_id: peek_install_id
-      }
-    } = conn
-
+  def on_booking_change(%{assigns: %{peek_install_id: "" <> peek_install_id}} = conn, params) do
     case Partners.get_partner_by_app_registry_install_refid(peek_install_id) do
       nil ->
         send_resp(conn, :ok, "Unknown install ID")
@@ -114,5 +112,11 @@ defmodule PhoenixStarterKitWeb.Registry.WebhookController do
         # PeekAppSDK.Metrics.track(partner, "booking.changed", %{"test_event_property": "test_value"})
         send_resp(conn, :ok, "Partner #{partner.name} received a booking change: #{inspect(params)}")
     end
+  end
+
+  def on_booking_change(conn, _params) do
+    conn
+    |> put_resp_content_type("text/plain")
+    |> send_resp(:unauthorized, "Unauthorized.")
   end
 end
