@@ -169,6 +169,11 @@ done
 
 print_success "Renaming complete!"
 
+# Make this app's own dev secret_key_base and LiveView signing salt
+echo ""
+print_status "Making dev secrets..."
+bin/dev-secrets
+
 # Step 5: Handle deployment platform
 echo ""
 if [ "$PLATFORM" = "flyio" ]; then

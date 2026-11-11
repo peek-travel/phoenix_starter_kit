@@ -39,3 +39,6 @@ npm-debug.log
 
 /.elixir_ls
 MEMORY.md
+
+# Dev-only secrets made by bin/dev-secrets
+/config/dev.secret.exs
