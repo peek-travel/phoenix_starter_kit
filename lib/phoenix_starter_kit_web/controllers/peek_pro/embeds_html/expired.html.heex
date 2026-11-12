@@ -6,10 +6,13 @@
     <link phx-track-static rel="stylesheet" href={~p"/assets/css/app.css"} />
     <title>Session Expired</title>
     <script>
-      // Reload the parent window after a short delay
-      setTimeout(function() {
-        window.top.location.reload();
-      }, 1000);
+      // In an iframe, reload the parent window after a short delay. The parent
+      // then posts a new peek-auth token.
+      if (window.top !== window.self) {
+        setTimeout(function() {
+          window.top.location.reload();
+        }, 1000);
+      }
     </script>
   </head>
   <body class="bg-white">

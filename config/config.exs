@@ -69,6 +69,14 @@ config :phoenix, :json_library, Jason
 
 config :sentry, client: PhoenixStarterKit.SentryFinchClient
 
+# Do not log the values of these request params. Each entry matches every
+# param name that contains it (for example "token" matches "login_token").
+config :phoenix, :filter_parameters, ["password", "token", "peek-auth"]
+
+# Hosts that can show the app in a frame (CSP frame-ancestors), next to 'self'.
+# Set FRAME_ANCESTORS (space-separated) to change the list at runtime.
+config :phoenix_starter_kit, :frame_ancestors, ["https://*.peek.com", "https://*.peeklabs.com"]
+
 # Configure timezone database
 config :elixir, :time_zone_database, Tzdata.TimeZoneDatabase
 

@@ -16,14 +16,6 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuthTest do
     %{partner_user: partner_user_fixture(), conn: conn}
   end
 
-  defp sign_auth_token(partner_user_id, partner_id) do
-    Phoenix.Token.sign(PhoenixStarterKitWeb.Endpoint, "partner_auth", {partner_user_id, partner_id})
-  end
-
-  defp sign_auth_token_with_locale(partner_user_id, partner_id, locale) do
-    Phoenix.Token.sign(PhoenixStarterKitWeb.Endpoint, "partner_auth", {partner_user_id, partner_id, locale})
-  end
-
   describe "log_in_partner_user/3" do
     test "stores the partner_user token in the session", %{conn: conn, partner_user: partner_user} do
       conn = PartnerUserAuth.log_in_partner_user(conn, partner_user)
@@ -84,6 +76,19 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuthTest do
       assert_receive %Phoenix.Socket.Broadcast{event: "disconnect", topic: ^live_socket_id}
     end
 
+    test "deletes the embed session token and notifies its LiveViews", %{conn: conn, partner_user: partner_user} do
+      partner = partner_fixture()
+      token = embed_session_token_fixture(partner_user, partner)
+      Phoenix.PubSub.subscribe(PhoenixStarterKit.PubSub, Partners.embed_session_topic(token))
+
+      conn
+      |> put_session(:embed_session_token, token)
+      |> PartnerUserAuth.log_out_partner_user()
+
+      refute Partners.get_partner_user_by_embed_session_token(token)
+      assert_receive :embed_session_revoked
+    end
+
     test "works even if partner_user is already logged out", %{conn: conn} do
       conn = conn |> fetch_cookies() |> PartnerUserAuth.log_out_partner_user()
       refute get_session(conn, :partner_user_token)
@@ -91,68 +96,72 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuthTest do
     end
   end
 
-  describe "fetch_partner_user_from_auth_token/2" do
-    test "authenticates partner_user from a valid auth_token param", %{
-      conn: conn,
-      partner_user: partner_user
-    } do
+  describe "fetch_partner_user_from_login_token/2" do
+    setup %{partner_user: partner_user} do
       partner = partner_fixture()
       {:ok, _} = Partners.connect_partner_user(partner, partner_user)
-      token = sign_auth_token(partner_user.id, partner.id)
+      %{partner: partner, login_token: Partners.generate_embed_login_token(partner_user, partner)}
+    end
+
+    test "puts an embed session token and the locale in the session", %{
+      conn: conn,
+      partner_user: partner_user,
+      partner: partner,
+      login_token: login_token
+    } do
+      conn =
+        conn
+        |> Map.put(:params, %{"login_token" => login_token, "locale" => "es"})
+        |> PartnerUserAuth.fetch_partner_user_from_login_token([])
+
+      embed_session_token = get_session(conn, :embed_session_token)
+      assert get_session(conn, :embed_locale) == "es"
+      assert embed_session_token != login_token
+
+      embed_partner_user = Partners.get_partner_user_by_embed_session_token(embed_session_token)
+      assert embed_partner_user.id == partner_user.id
+      assert embed_partner_user.partner.id == partner.id
+    end
+
+    test "puts a nil locale in the session for a blank locale param", %{conn: conn, login_token: login_token} do
+      conn =
+        conn
+        |> Map.put(:params, %{"login_token" => login_token, "locale" => ""})
+        |> PartnerUserAuth.fetch_partner_user_from_login_token([])
+
+      assert get_session(conn, :embed_session_token)
+      assert get_session(conn, :embed_locale) == nil
+    end
+
+    test "accepts a login token one time only", %{conn: conn, login_token: login_token} do
+      conn
+      |> Map.put(:params, %{"login_token" => login_token})
+      |> PartnerUserAuth.fetch_partner_user_from_login_token([])
 
       conn =
         conn
-        |> Map.put(:params, %{"auth_token" => token})
-        |> PartnerUserAuth.fetch_partner_user_from_auth_token([])
+        |> Map.put(:params, %{"login_token" => login_token})
+        |> PartnerUserAuth.fetch_partner_user_from_login_token([])
 
-      assert conn.assigns.current_partner_user.id == partner_user.id
-      assert conn.assigns.current_partner.id == partner.id
-      assert conn.assigns.auth_token == token
-      assert get_session(conn, :auth_token) == token
+      refute get_session(conn, :embed_session_token)
     end
 
-    test "does nothing when no auth_token param is present", %{conn: conn} do
+    test "does nothing when no login_token param is present", %{conn: conn} do
       conn =
         conn
         |> Map.put(:params, %{})
-        |> PartnerUserAuth.fetch_partner_user_from_auth_token([])
+        |> PartnerUserAuth.fetch_partner_user_from_login_token([])
 
-      refute conn.assigns[:current_partner_user]
-      refute conn.assigns[:auth_token]
+      refute get_session(conn, :embed_session_token)
     end
 
-    test "does nothing with an invalid auth_token", %{conn: conn} do
+    test "does nothing with an invalid login_token", %{conn: conn} do
       conn =
         conn
-        |> Map.put(:params, %{"auth_token" => "garbage"})
-        |> PartnerUserAuth.fetch_partner_user_from_auth_token([])
+        |> Map.put(:params, %{"login_token" => "garbage"})
+        |> PartnerUserAuth.fetch_partner_user_from_login_token([])
 
-      refute conn.assigns[:current_partner_user]
-    end
-
-    test "does nothing when the partner_user no longer exists", %{conn: conn} do
-      token = sign_auth_token(Ecto.UUID.generate(), Ecto.UUID.generate())
-
-      conn =
-        conn
-        |> Map.put(:params, %{"auth_token" => token})
-        |> PartnerUserAuth.fetch_partner_user_from_auth_token([])
-
-      refute conn.assigns[:current_partner_user]
-    end
-
-    test "assigns locale from a new-format auth_token", %{conn: conn, partner_user: partner_user} do
-      partner = partner_fixture()
-      {:ok, _} = Partners.connect_partner_user(partner, partner_user)
-      token = sign_auth_token_with_locale(partner_user.id, partner.id, "es")
-
-      conn =
-        conn
-        |> Map.put(:params, %{"auth_token" => token})
-        |> PartnerUserAuth.fetch_partner_user_from_auth_token([])
-
-      assert conn.assigns.current_partner_user.id == partner_user.id
-      assert conn.assigns.locale == "es"
+      refute get_session(conn, :embed_session_token)
     end
   end
 
@@ -195,37 +204,26 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuthTest do
   end
 
   describe "fetch_current_partner_user/2" do
-    test "skips when current_partner_user is already assigned", %{
-      conn: conn,
-      partner_user: partner_user
-    } do
-      conn =
-        conn
-        |> assign(:current_partner_user, partner_user)
-        |> PartnerUserAuth.fetch_current_partner_user([])
-
-      assert conn.assigns.current_partner_user.id == partner_user.id
-    end
-
-    test "authenticates from session-persisted auth_token", %{
+    test "authenticates from the embed session token in the session", %{
       conn: conn,
       partner_user: partner_user
     } do
       partner = partner_fixture()
-      {:ok, _} = Partners.connect_partner_user(partner, partner_user)
-      token = sign_auth_token(partner_user.id, partner.id)
+      token = embed_session_token_fixture(partner_user, partner)
 
       conn =
         conn
-        |> put_session(:auth_token, token)
+        |> put_session(:embed_session_token, token)
+        |> put_session(:embed_locale, "es")
         |> PartnerUserAuth.fetch_current_partner_user([])
 
       assert conn.assigns.current_partner_user.id == partner_user.id
       assert conn.assigns.current_partner.id == partner.id
-      assert conn.assigns.auth_token == token
+      assert conn.assigns.embed_session_token == token
+      assert conn.assigns.locale == "es"
     end
 
-    test "falls through to session token when auth_token is invalid", %{
+    test "falls through to session token when the embed session token is invalid", %{
       conn: conn,
       partner_user: partner_user
     } do
@@ -233,19 +231,24 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuthTest do
 
       conn =
         conn
-        |> put_session(:auth_token, "expired-or-bad")
+        |> put_session(:embed_session_token, "expired-or-bad")
         |> put_session(:partner_user_token, partner_user_token)
         |> PartnerUserAuth.fetch_current_partner_user([])
 
       assert conn.assigns.current_partner_user.id == partner_user.id
+      refute conn.assigns[:embed_session_token]
     end
 
-    test "falls through when auth_token user no longer exists", %{conn: conn} do
-      token = sign_auth_token(Ecto.UUID.generate(), Ecto.UUID.generate())
+    test "does not authenticate with an embed session token older than 24 hours", %{
+      conn: conn,
+      partner_user: partner_user
+    } do
+      token = embed_session_token_fixture(partner_user, partner_fixture())
+      age_tokens("embed_session", 86_401)
 
       conn =
         conn
-        |> put_session(:auth_token, token)
+        |> put_session(:embed_session_token, token)
         |> PartnerUserAuth.fetch_current_partner_user([])
 
       refute conn.assigns.current_partner_user
@@ -318,14 +321,11 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuthTest do
       assert updated_socket.assigns.current_partner_user.id == partner_user.id
     end
 
-    test "authenticates current_partner_user from auth_token in session", %{
+    test "authenticates current_partner_user from the embed session token", %{
       partner_user: partner_user
     } do
-      partner = partner_fixture()
-      {:ok, _} = Partners.connect_partner_user(partner, partner_user)
-      token = sign_auth_token(partner_user.id, partner.id)
-
-      session = %{"auth_token" => token}
+      token = embed_session_token_fixture(partner_user, partner_fixture())
+      session = %{"embed_session_token" => token}
 
       {:cont, updated_socket} =
         PartnerUserAuth.on_mount(:ensure_authenticated, %{}, session, %LiveView.Socket{})
@@ -333,8 +333,8 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuthTest do
       assert updated_socket.assigns.current_partner_user.id == partner_user.id
     end
 
-    test "halts with invalid auth_token and no partner_user_token", %{conn: _conn} do
-      session = %{"auth_token" => "bad-token"}
+    test "halts with an invalid embed session token and no partner_user_token", %{conn: _conn} do
+      session = %{"embed_session_token" => "bad-token"}
 
       socket = %LiveView.Socket{
         endpoint: PhoenixStarterKitWeb.Endpoint,
@@ -347,9 +347,10 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuthTest do
       assert updated_socket.assigns.current_partner_user == nil
     end
 
-    test "halts when auth_token user no longer exists", %{conn: _conn} do
-      token = sign_auth_token(Ecto.UUID.generate(), Ecto.UUID.generate())
-      session = %{"auth_token" => token}
+    test "halts when the embed session token was deleted", %{partner_user: partner_user} do
+      token = embed_session_token_fixture(partner_user, partner_fixture())
+      :ok = Partners.delete_embed_session_token(token)
+      session = %{"embed_session_token" => token}
 
       socket = %LiveView.Socket{
         endpoint: PhoenixStarterKitWeb.Endpoint,
@@ -406,12 +407,9 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuthTest do
       assert updated_socket.assigns.current_partner_user.id == partner_user.id
     end
 
-    test "assigns current_partner_user from auth_token", %{partner_user: partner_user} do
-      partner = partner_fixture()
-      {:ok, _} = Partners.connect_partner_user(partner, partner_user)
-      token = sign_auth_token(partner_user.id, partner.id)
-
-      session = %{"auth_token" => token}
+    test "assigns current_partner_user from the embed session token", %{partner_user: partner_user} do
+      token = embed_session_token_fixture(partner_user, partner_fixture())
+      session = %{"embed_session_token" => token}
 
       {:cont, updated_socket} =
         PartnerUserAuth.on_mount(:mount_current_partner_user, %{}, session, %LiveView.Socket{})
@@ -428,28 +426,27 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuthTest do
   end
 
   describe "live_session_data/1" do
-    test "returns auth_token and session data", %{conn: conn} do
-      token = sign_auth_token(Ecto.UUID.generate(), Ecto.UUID.generate())
+    test "returns the embed session token and session data", %{conn: conn} do
+      token = "some-embed-session-token"
       partner_user_token = "some-session-token"
 
       conn =
         conn
-        |> assign(:auth_token, token)
+        |> assign(:embed_session_token, token)
         |> put_session(:partner_user_token, partner_user_token)
         |> put_session("current_partner_id", "some-partner-id")
 
       result = PartnerUserAuth.live_session_data(conn)
 
-      assert result["auth_token"] == token
+      assert result["embed_session_token"] == token
       assert result["partner_user_token"] == partner_user_token
       assert result["current_partner_id"] == "some-partner-id"
     end
 
     test "returns nils when no auth data is present", %{conn: conn} do
-      conn = assign(conn, :auth_token, nil)
       result = PartnerUserAuth.live_session_data(conn)
 
-      assert result["auth_token"] == nil
+      assert result["embed_session_token"] == nil
       assert result["partner_user_token"] == nil
       assert result["current_partner_id"] == nil
     end
@@ -490,6 +487,19 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuthTest do
 
       assert halted_conn.halted
       refute get_session(halted_conn, :partner_user_return_to)
+    end
+
+    test "shows the expired page for a login_token that was not accepted", %{conn: conn} do
+      conn =
+        conn
+        |> Map.put(:params, %{"login_token" => "used-or-expired"})
+        |> fetch_flash()
+        |> put_private(:phoenix_endpoint, PhoenixStarterKitWeb.Endpoint)
+        |> put_private(:phoenix_format, "html")
+        |> PartnerUserAuth.require_authenticated_partner_user([])
+
+      assert conn.halted
+      assert html_response(conn, 200) =~ "Session Expired"
     end
 
     test "does not redirect if partner_user is authenticated", %{

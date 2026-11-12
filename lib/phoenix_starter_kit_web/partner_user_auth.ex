@@ -9,13 +9,18 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
   Authentication flow for iframe-embedded contexts (e.g. peek-pro app-store):
   1. The parent app POSTs a peek-auth token to /peek-pro/settings
   2. EmbedsController verifies the token, upserts the partner user, and
-     generates a signed Phoenix.Token containing {partner_user_id, partner_id, locale}
-  3. The user is redirected to /settings?auth_token=<token>
-  4. `fetch_partner_user_from_auth_token` verifies the token and assigns the user
-  5. `live_session_data` embeds the auth_token into the LiveView's phx-session
-     token (serialized into the HTML), so it's available on longpoll/WebSocket
-     connect WITHOUT cookies
-  6. `on_mount` verifies the auth_token directly — no cookie session needed
+     creates a one-time login token that is valid for 60 seconds
+  3. The user is redirected to /settings?login_token=<token>&locale=<locale>
+  4. `fetch_partner_user_from_login_token` exchanges the login token for an
+     embed session token (a DB row, valid for 24 hours) and puts it in the session
+  5. `fetch_current_partner_user` gets the user for the embed session token
+  6. `live_session_data` embeds the embed session token into the LiveView's
+     phx-session token (serialized into the HTML), so it's available on
+     longpoll/WebSocket connect WITHOUT cookies
+  7. `on_mount` checks the embed session token in the DB — no cookie session needed
+
+  Logout and uninstall delete the embed session tokens, and the open LiveViews
+  that use them redirect to "/".
   """
   use PhoenixStarterKitWeb, :verified_routes
 
@@ -26,10 +31,6 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
   alias PhoenixStarterKit.Partners
   alias PhoenixStarterKit.Repo
   alias PhoenixStarterKitWeb.PlatformGettext
-
-  # Auth token valid for 24 hours — needs to survive the full LiveView session
-  # including longpoll reconnects. Re-issued on every entry from peek-pro.
-  @auth_token_max_age 86_400
 
   @doc """
   Logs the partner_user in.
@@ -79,6 +80,8 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
   def log_out_partner_user(conn) do
     partner_user_token = get_session(conn, :partner_user_token)
     partner_user_token && Partners.delete_partner_user_session_token(partner_user_token)
+    embed_session_token = get_session(conn, :embed_session_token)
+    embed_session_token && Partners.delete_embed_session_token(embed_session_token)
 
     if live_socket_id = get_session(conn, :live_socket_id) do
       PhoenixStarterKitWeb.Endpoint.broadcast(live_socket_id, "disconnect", %{})
@@ -90,64 +93,45 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
   end
 
   @doc """
-  Plug that authenticates a partner user from a signed auth_token in the
-  query params. This is the entry point for iframe-based authentication
+  Plug that exchanges the one-time `login_token` query param for an embed
+  session token. This is the entry point for iframe-based authentication
   where third-party cookies are blocked (Safari, incognito).
 
-  Stores the auth_token in conn assigns so `live_session_data` can embed
-  it in the LiveView's phx-session token — completely bypassing cookies.
+  It puts the embed session token and the `locale` param in the session.
+  `fetch_current_partner_user` reads them in the same request, and
+  `live_session_data` embeds them in the LiveView's phx-session token.
+  A login token that is not valid changes nothing.
   """
-  def fetch_partner_user_from_auth_token(conn, _opts) do
-    with token when is_binary(token) <- conn.params["auth_token"],
-         {:ok, token_data} <-
-           Phoenix.Token.verify(PhoenixStarterKitWeb.Endpoint, "partner_auth", token, max_age: @auth_token_max_age),
-         {partner_user_id, partner_id, locale} <- normalize_token_data(token_data),
-         %{} = partner_user <- Partners.get_partner_user(partner_user_id) do
-      partner_user = Partners.set_current_partner(partner_user, partner_id)
-
+  def fetch_partner_user_from_login_token(conn, _opts) do
+    with login_token when is_binary(login_token) <- conn.params["login_token"],
+         {:ok, embed_session_token} <- Partners.exchange_embed_login_token(login_token) do
       conn
-      |> assign(:current_partner_user, partner_user)
-      |> assign(:current_partner, partner_user.partner)
-      |> assign(:auth_token, token)
-      |> assign(:locale, locale)
-      # Persist auth_token in the session so it survives page reloads when
-      # the URL no longer contains it. In an iframe on Safari the session
-      # cookie is blocked,
-      # but LiveView handles navigation without full reloads there. When
-      # the page is opened in a new tab it becomes first-party and the
-      # cookie works normally.
-      |> put_session(:auth_token, token)
+      |> put_session(:embed_session_token, embed_session_token)
+      |> put_session(:embed_locale, embed_locale(conn.params["locale"]))
     else
       _ -> conn
     end
   end
 
+  defp embed_locale(locale) when is_binary(locale) and locale != "", do: locale
+  defp embed_locale(_locale), do: nil
+
   @doc """
-  Authenticates the partner_user by looking into the session.
-  Skips if :current_partner_user is already assigned (e.g. by auth token plug).
+  Authenticates the partner_user from the embed session token in the session,
+  else from the partner_user session token.
   """
   def fetch_current_partner_user(conn, _opts) do
-    if conn.assigns[:current_partner_user] do
-      conn
-    else
-      # First try to restore from a session-persisted auth_token (set by
-      # fetch_partner_user_from_auth_token on a previous request).
-      with token when is_binary(token) <- get_session(conn, :auth_token),
-           {:ok, token_data} <-
-             Phoenix.Token.verify(PhoenixStarterKitWeb.Endpoint, "partner_auth", token, max_age: @auth_token_max_age),
-           {partner_user_id, partner_id, locale} <- normalize_token_data(token_data),
-           %{} = partner_user <- Partners.get_partner_user(partner_user_id) do
-        partner_user = Partners.set_current_partner(partner_user, partner_id)
-        set_sentry_context(partner_user)
+    with token when is_binary(token) <- get_session(conn, :embed_session_token),
+         %{} = partner_user <- Partners.get_partner_user_by_embed_session_token(token) do
+      set_sentry_context(partner_user)
 
-        conn
-        |> assign(:current_partner_user, partner_user)
-        |> assign(:current_partner, partner_user.partner)
-        |> assign(:auth_token, token)
-        |> assign(:locale, locale)
-      else
-        _ -> fetch_partner_user_from_session(conn)
-      end
+      conn
+      |> assign(:current_partner_user, partner_user)
+      |> assign(:current_partner, partner_user.partner)
+      |> assign(:embed_session_token, token)
+      |> assign(:locale, get_session(conn, :embed_locale))
+    else
+      _ -> fetch_partner_user_from_session(conn)
     end
   end
 
@@ -208,20 +192,19 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
   @doc """
   Returns session data to embed in the LiveView's phx-session token.
 
-  This is the key mechanism for cookie-free auth: the auth_token is
+  This is the key mechanism for cookie-free auth: the embed session token is
   serialized into the HTML and sent back on longpoll/WebSocket connect,
   completely bypassing the cookie-based Plug session.
 
   Used by the `session:` option on `live_session` in the router.
   """
   def live_session_data(conn) do
-    auth_token = conn.assigns[:auth_token]
     partner_user_token = get_session(conn, :partner_user_token)
 
     %{
-      # The signed Phoenix.Token — verified directly in on_mount.
+      # The embed session token — checked in the DB in on_mount.
       # This is embedded in the HTML and doesn't depend on cookies.
-      "auth_token" => auth_token,
+      "embed_session_token" => conn.assigns[:embed_session_token],
       # Keep session-based keys as fallback for first-party contexts
       # where cookies work normally.
       "partner_user_token" => partner_user_token,
@@ -234,7 +217,7 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
   Plug that resolves the Gettext locale for the current request.
 
   Priority:
-    1. JWT locale from `:locale` assign (set by fetch_partner_user_from_auth_token)
+    1. JWT locale from `:locale` assign (set by fetch_current_partner_user)
     2. Browser locale parsed from the Accept-Language request header
 
   Assigns `:locale` on the conn so `live_session_data/1` can carry it into
@@ -336,13 +319,41 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
       set_sentry_context(partner_user)
     end
 
-    safe_on_mount(socket)
+    socket
+    |> watch_embed_session(session["embed_session_token"])
+    |> safe_on_mount()
   end
+
+  # Redirects the connected LiveView to "/" when its embed session token is
+  # deleted (logout or uninstall).
+  defp watch_embed_session(socket, embed_session_token) when is_binary(embed_session_token) do
+    topic = Partners.embed_session_topic(embed_session_token)
+
+    if topic && socket.assigns.current_partner_user && Phoenix.LiveView.connected?(socket) do
+      Phoenix.PubSub.subscribe(PhoenixStarterKit.PubSub, topic)
+      Phoenix.LiveView.attach_hook(socket, :embed_session_revoked, :handle_info, &handle_embed_session_revoked/2)
+    else
+      socket
+    end
+  end
+
+  defp watch_embed_session(socket, _embed_session_token), do: socket
+
+  defp handle_embed_session_revoked(:embed_session_revoked, socket) do
+    socket =
+      socket
+      |> Phoenix.LiveView.put_flash(:error, t("You must log in to access this page."))
+      |> Phoenix.LiveView.redirect(to: ~p"/")
+
+    {:halt, socket}
+  end
+
+  defp handle_embed_session_revoked(_message, socket), do: {:cont, socket}
 
   defp resolve_session(session) do
     cond do
-      auth_token = session["auth_token"] ->
-        verify_auth_token(auth_token)
+      embed_session_token = session["embed_session_token"] ->
+        {Partners.get_partner_user_by_embed_session_token(embed_session_token), session["locale"]}
 
       partner_user_token = session["partner_user_token"] ->
         partner_user =
@@ -357,27 +368,6 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
         {nil, session["locale"]}
     end
   end
-
-  defp verify_auth_token(token) do
-    case Phoenix.Token.verify(PhoenixStarterKitWeb.Endpoint, "partner_auth", token, max_age: @auth_token_max_age) do
-      {:ok, token_data} ->
-        {partner_user_id, partner_id, locale} = normalize_token_data(token_data)
-
-        partner_user =
-          case Partners.get_partner_user(partner_user_id) do
-            nil -> nil
-            partner_user -> Partners.set_current_partner(partner_user, partner_id)
-          end
-
-        {partner_user, locale}
-
-      _ ->
-        {nil, nil}
-    end
-  end
-
-  defp normalize_token_data({partner_user_id, partner_id, locale}), do: {partner_user_id, partner_id, locale}
-  defp normalize_token_data({partner_user_id, partner_id}), do: {partner_user_id, partner_id, nil}
 
   defp safe_on_mount(socket) do
     # This is only for tests and annoying; getting an error about how the live
@@ -408,14 +398,27 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
   they use the application at all, here would be a good place.
   """
   def require_authenticated_partner_user(conn, _opts) do
-    if conn.assigns[:current_partner_user] do
-      conn
-    else
-      conn
-      |> put_flash(:error, t("You must log in to access this page."))
-      |> maybe_store_return_to()
-      |> redirect(to: ~p"/")
-      |> halt()
+    cond do
+      conn.assigns[:current_partner_user] ->
+        conn
+
+      # A used or expired login token, e.g. a reload in a Safari iframe that
+      # has no session cookie: show the page that reloads the Peek Pro parent,
+      # which gets a new login token.
+      match?(%{"login_token" => _}, conn.params) ->
+        conn
+        |> put_root_layout(false)
+        |> put_layout(false)
+        |> put_view(PhoenixStarterKitWeb.PeekPro.EmbedsHTML)
+        |> render(:expired)
+        |> halt()
+
+      true ->
+        conn
+        |> put_flash(:error, t("You must log in to access this page."))
+        |> maybe_store_return_to()
+        |> redirect(to: ~p"/")
+        |> halt()
     end
   end
 

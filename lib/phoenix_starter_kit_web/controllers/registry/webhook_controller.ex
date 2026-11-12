@@ -83,6 +83,7 @@ defmodule PhoenixStarterKitWeb.Registry.WebhookController do
   # These are great places to "do things"; for the uninstall case you might want
   # to clear out an API key, delete some records, let another system know, etc.
   defp on_uninstalled(partner) do
+    Partners.delete_embed_tokens_for_partner(partner)
     PeekAppSDK.Metrics.track_uninstall(partner)
   end
 

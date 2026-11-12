@@ -12,9 +12,9 @@ defmodule PhoenixStarterKitWeb.Router do
     plug :put_root_layout, html: {PhoenixStarterKitWeb.Layouts, :root}
     plug :protect_from_forgery
     plug :put_secure_browser_headers
-    plug :fetch_partner_user_from_auth_token
+    plug :fetch_partner_user_from_login_token
     plug :fetch_current_partner_user
-    plug :allow_peek_iframe
+    plug PhoenixStarterKitWeb.Plugs.ContentSecurityPolicy
     plug PhoenixStarterKitWeb.Plugs.SetCurrentPartner
     plug :put_locale_from_browser
   end
@@ -26,7 +26,7 @@ defmodule PhoenixStarterKitWeb.Router do
   pipeline :webhook do
     plug :accepts, ["json"]
     plug :set_peek_install_id
-    plug :allow_peek_iframe
+    plug PhoenixStarterKitWeb.Plugs.ContentSecurityPolicy
   end
 
   # The registry signs each install webhook. The plug sends 401 and halts when the
@@ -34,7 +34,7 @@ defmodule PhoenixStarterKitWeb.Router do
   pipeline :install_webhook do
     plug :accepts, ["json"]
     plug :require_signed_install_webhook
-    plug :allow_peek_iframe
+    plug PhoenixStarterKitWeb.Plugs.ContentSecurityPolicy
   end
 
   pipeline :widget_api do
@@ -47,7 +47,7 @@ defmodule PhoenixStarterKitWeb.Router do
     plug :accepts, ["html"]
     plug :fetch_session
     plug :set_peek_install_id
-    plug :allow_peek_iframe
+    plug PhoenixStarterKitWeb.Plugs.ContentSecurityPolicy
     plug PhoenixStarterKitWeb.Plugs.SetCurrentPartner
   end
 

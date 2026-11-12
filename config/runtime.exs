@@ -20,6 +20,12 @@ if System.get_env("PHX_SERVER") do
   config :phoenix_starter_kit, PhoenixStarterKitWeb.Endpoint, server: true
 end
 
+# Optional: the hosts that can show the app in a frame, space-separated.
+# Example: FRAME_ANCESTORS="https://*.peek.com https://app.example.com"
+if frame_ancestors = System.get_env("FRAME_ANCESTORS") do
+  config :phoenix_starter_kit, :frame_ancestors, String.split(frame_ancestors)
+end
+
 if config_env() == :dev do
   import Dotenvy
   source!(".env")

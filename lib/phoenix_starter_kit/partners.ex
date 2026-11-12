@@ -201,8 +201,6 @@ defmodule PhoenixStarterKit.Partners do
 
   Returns nil if the PartnerUser does not exist.
   """
-  def get_partner_user(id), do: Repo.get(PartnerUser, id)
-
   def get_partner_user_by_email(email) when is_binary(email) do
     Repo.get_by(PartnerUser, email: email)
   end
@@ -249,6 +247,88 @@ defmodule PhoenixStarterKit.Partners do
   def delete_partner_user_session_token(token) do
     Repo.delete_all(PartnerUserToken.by_token_and_context_query(token, "session"))
     :ok
+  end
+
+  @doc """
+  Creates a one-time login token for the Peek Pro iframe login of the partner
+  user to the partner. It is valid for 60 seconds.
+
+  It also deletes the expired iframe login and session tokens.
+  """
+  def generate_embed_login_token(%PartnerUser{} = partner_user, %Partner{} = partner) do
+    Repo.delete_all(PartnerUserToken.expired_embed_tokens_query())
+    {token, row} = PartnerUserToken.build_embed_token(partner_user.id, partner.id, "embed_login")
+    Repo.insert!(row)
+    token
+  end
+
+  @doc """
+  Exchanges a login token from `generate_embed_login_token/2` for a session
+  token that is valid for 24 hours. The login token works one time only.
+
+  Returns `{:ok, session_token}`, or `:error` when the login token is not valid.
+  """
+  def exchange_embed_login_token(login_token) when is_binary(login_token) do
+    with {:ok, query} <- PartnerUserToken.verify_embed_token_query(login_token, "embed_login"),
+         {1, [row]} <- Repo.delete_all(select(query, [t], t)) do
+      {session_token, session_row} = PartnerUserToken.build_embed_token(row.partner_user_id, row.sent_to, "embed_session")
+      Repo.insert!(session_row)
+      {:ok, session_token}
+    else
+      _ -> :error
+    end
+  end
+
+  @doc """
+  Gets the partner_user, with its current partner set, for a valid iframe
+  session token. Returns `nil` otherwise.
+  """
+  def get_partner_user_by_embed_session_token(session_token) when is_binary(session_token) do
+    with {:ok, query} <- PartnerUserToken.verify_embed_token_query(session_token, "embed_session"),
+         %PartnerUserToken{} = row <- query |> preload(:partner_user) |> Repo.one() do
+      set_current_partner(row.partner_user, row.sent_to)
+    else
+      _ -> nil
+    end
+  end
+
+  @doc """
+  Deletes the iframe session token and disconnects the LiveViews that use it.
+  """
+  def delete_embed_session_token(session_token) when is_binary(session_token) do
+    with {:ok, hashed} <- PartnerUserToken.decode_hash(session_token) do
+      Repo.delete_all(PartnerUserToken.by_token_and_context_query(hashed, "embed_session"))
+      broadcast_embed_session_revoked(hashed)
+    end
+
+    :ok
+  end
+
+  @doc """
+  Deletes all iframe login and session tokens for the partner and disconnects
+  the LiveViews that use them. The app calls this when the partner uninstalls it.
+  """
+  def delete_embed_tokens_for_partner(%Partner{} = partner) do
+    {_count, hashes} = Repo.delete_all(select(PartnerUserToken.by_partner_embed_query(partner.id), [t], t.token))
+    Enum.each(hashes, &broadcast_embed_session_revoked/1)
+    :ok
+  end
+
+  @doc """
+  Returns the PubSub topic that gets `:embed_session_revoked` when the iframe
+  session token is deleted, or `nil` for a token that is not valid.
+  """
+  def embed_session_topic(session_token) when is_binary(session_token) do
+    case PartnerUserToken.decode_hash(session_token) do
+      {:ok, hashed} -> embed_session_topic_for_hash(hashed)
+      :error -> nil
+    end
+  end
+
+  defp embed_session_topic_for_hash(hashed), do: "embed_session:" <> Base.url_encode64(hashed, padding: false)
+
+  defp broadcast_embed_session_revoked(hashed) do
+    Phoenix.PubSub.broadcast(PhoenixStarterKit.PubSub, embed_session_topic_for_hash(hashed), :embed_session_revoked)
   end
 
   @doc """
