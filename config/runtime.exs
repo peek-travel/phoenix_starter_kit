@@ -56,7 +56,7 @@ frame_ancestors =
     do: Dotenvy.env!("FRAME_ANCESTORS", :string, nil),
     else: System.get_env("FRAME_ANCESTORS")
 
-if frame_ancestors do
+if frame_ancestors not in [nil, ""] do
   config :phoenix_starter_kit, :frame_ancestors, String.split(frame_ancestors)
 end
 
