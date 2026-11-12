@@ -253,10 +253,10 @@ defmodule PhoenixStarterKit.Partners do
   Creates a one-time login token for the Peek Pro iframe login of the partner
   user to the partner. It is valid for 60 seconds.
 
-  It also deletes the expired iframe login and session tokens.
+  It also deletes the expired iframe login and session tokens of the partner user.
   """
   def generate_embed_login_token(%PartnerUser{} = partner_user, %Partner{} = partner) do
-    Repo.delete_all(PartnerUserToken.expired_embed_tokens_query())
+    Repo.delete_all(PartnerUserToken.expired_embed_tokens_query(partner_user.id))
     {token, row} = PartnerUserToken.build_embed_token(partner_user.id, partner.id, "embed_login")
     Repo.insert!(row)
     token
@@ -281,12 +281,15 @@ defmodule PhoenixStarterKit.Partners do
 
   @doc """
   Gets the partner_user, with its current partner set, for a valid iframe
-  session token. Returns `nil` otherwise.
+  session token. Returns `nil` otherwise, also when the partner user is no
+  longer connected to the partner of the token.
   """
   def get_partner_user_by_embed_session_token(session_token) when is_binary(session_token) do
     with {:ok, query} <- PartnerUserToken.verify_embed_token_query(session_token, "embed_session"),
-         %PartnerUserToken{} = row <- query |> preload(:partner_user) |> Repo.one() do
-      set_current_partner(row.partner_user, row.sent_to)
+         %PartnerUserToken{} = row <- query |> preload(:partner_user) |> Repo.one(),
+         %PartnerUser{partner: %Partner{id: partner_id}} = partner_user when partner_id == row.sent_to <-
+           set_current_partner(row.partner_user, row.sent_to) do
+      partner_user
     else
       _ -> nil
     end

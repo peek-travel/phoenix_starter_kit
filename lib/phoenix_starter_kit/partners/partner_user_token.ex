@@ -114,13 +114,16 @@ defmodule PhoenixStarterKit.Partners.PartnerUserToken do
   end
 
   @doc """
-  Returns the query for the embed token rows that are after their validity time.
+  Returns the query for the embed token rows of the partner user that are
+  after their validity time.
   """
-  def expired_embed_tokens_query do
-    from t in PartnerUserToken,
-      where:
-        (t.context == "embed_login" and t.inserted_at <= ago(@embed_login_validity_in_seconds, "second")) or
-          (t.context == "embed_session" and t.inserted_at <= ago(@embed_session_validity_in_seconds, "second"))
+  def expired_embed_tokens_query(partner_user_id) do
+    expired =
+      Enum.reduce(@embed_contexts, false, fn context, expired ->
+        dynamic([t], ^expired or (t.context == ^context and t.inserted_at <= ago(^validity(context), "second")))
+      end)
+
+    from t in PartnerUserToken, where: t.partner_user_id == ^partner_user_id, where: ^expired
   end
 
   @doc """

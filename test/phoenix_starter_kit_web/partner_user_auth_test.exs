@@ -123,6 +123,20 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuthTest do
       assert embed_partner_user.partner.id == partner.id
     end
 
+    test "renews the session and removes the old session keys", %{conn: conn, login_token: login_token} do
+      conn =
+        conn
+        |> put_session(:partner_user_token, "old-token")
+        |> put_session("current_partner_id", "old-partner-id")
+        |> Map.put(:params, %{"login_token" => login_token})
+        |> PartnerUserAuth.fetch_partner_user_from_login_token([])
+
+      assert get_session(conn, :embed_session_token)
+      refute get_session(conn, :partner_user_token)
+      refute get_session(conn, "current_partner_id")
+      assert conn.private.plug_session_info == :renew
+    end
+
     test "puts a nil locale in the session for a blank locale param", %{conn: conn, login_token: login_token} do
       conn =
         conn
@@ -221,6 +235,16 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuthTest do
       assert conn.assigns.current_partner.id == partner.id
       assert conn.assigns.embed_session_token == token
       assert conn.assigns.locale == "es"
+    end
+
+    test "sets the platform of the partner for the embed session token", %{conn: conn, partner_user: partner_user} do
+      token = embed_session_token_fixture(partner_user, partner_fixture(%{platform: :acme}))
+
+      conn
+      |> put_session(:embed_session_token, token)
+      |> PartnerUserAuth.fetch_current_partner_user([])
+
+      assert PhoenixStarterKitWeb.PlatformGettext.get_platform() == :acme
     end
 
     test "falls through to session token when the embed session token is invalid", %{
@@ -345,6 +369,24 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuthTest do
         PartnerUserAuth.on_mount(:ensure_authenticated, %{}, session, socket)
 
       assert updated_socket.assigns.current_partner_user == nil
+    end
+
+    test "uses the partner_user_token when the embed session token is not valid", %{
+      conn: conn,
+      partner_user: partner_user
+    } do
+      partner_user_token = Partners.generate_partner_user_session_token(partner_user)
+
+      session =
+        conn
+        |> put_session(:partner_user_token, partner_user_token)
+        |> put_session(:embed_session_token, "expired-or-bad")
+        |> get_session()
+
+      {:cont, updated_socket} =
+        PartnerUserAuth.on_mount(:ensure_authenticated, %{}, session, %LiveView.Socket{})
+
+      assert updated_socket.assigns.current_partner_user.id == partner_user.id
     end
 
     test "halts when the embed session token was deleted", %{partner_user: partner_user} do

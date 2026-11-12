@@ -97,7 +97,8 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
   session token. This is the entry point for iframe-based authentication
   where third-party cookies are blocked (Safari, incognito).
 
-  It puts the embed session token and the `locale` param in the session.
+  It renews the session and puts the embed session token and the `locale`
+  param in it.
   `fetch_current_partner_user` reads them in the same request, and
   `live_session_data` embeds them in the LiveView's phx-session token.
   A login token that is not valid changes nothing.
@@ -106,6 +107,7 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
     with login_token when is_binary(login_token) <- conn.params["login_token"],
          {:ok, embed_session_token} <- Partners.exchange_embed_login_token(login_token) do
       conn
+      |> renew_session()
       |> put_session(:embed_session_token, embed_session_token)
       |> put_session(:embed_locale, embed_locale(conn.params["locale"]))
     else
@@ -124,6 +126,7 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
     with token when is_binary(token) <- get_session(conn, :embed_session_token),
          %{} = partner_user <- Partners.get_partner_user_by_embed_session_token(token) do
       set_sentry_context(partner_user)
+      PlatformGettext.put_platform(partner_user.partner.platform)
 
       conn
       |> assign(:current_partner_user, partner_user)
@@ -351,9 +354,13 @@ defmodule PhoenixStarterKitWeb.PartnerUserAuth do
   defp handle_embed_session_revoked(_message, socket), do: {:cont, socket}
 
   defp resolve_session(session) do
+    embed_partner_user =
+      if embed_session_token = session["embed_session_token"],
+        do: Partners.get_partner_user_by_embed_session_token(embed_session_token)
+
     cond do
-      embed_session_token = session["embed_session_token"] ->
-        {Partners.get_partner_user_by_embed_session_token(embed_session_token), session["locale"]}
+      embed_partner_user ->
+        {embed_partner_user, session["locale"]}
 
       partner_user_token = session["partner_user_token"] ->
         partner_user =

@@ -20,12 +20,6 @@ if System.get_env("PHX_SERVER") do
   config :phoenix_starter_kit, PhoenixStarterKitWeb.Endpoint, server: true
 end
 
-# Optional: the hosts that can show the app in a frame, space-separated.
-# Example: FRAME_ANCESTORS="https://*.peek.com https://app.example.com"
-if frame_ancestors = System.get_env("FRAME_ANCESTORS") do
-  config :phoenix_starter_kit, :frame_ancestors, String.split(frame_ancestors)
-end
-
 if config_env() == :dev do
   import Dotenvy
   source!(".env")
@@ -52,6 +46,18 @@ if config_env() == :dev do
   # Configure embedded app URL; this is used for redirecting to app store if
   # needed (oauth or from a landing page; can be helpful when testing)
   config :phoenix_starter_kit, embedded_app_url: env!("EMBEDDED_APP_URL", :string, nil)
+end
+
+# Optional: the hosts that can show the app in a frame, space-separated.
+# Example: FRAME_ANCESTORS="https://*.peek.com https://app.example.com"
+# In dev the value comes from .env (Dotenvy), else from the environment.
+frame_ancestors =
+  if config_env() == :dev,
+    do: Dotenvy.env!("FRAME_ANCESTORS", :string, nil),
+    else: System.get_env("FRAME_ANCESTORS")
+
+if frame_ancestors do
+  config :phoenix_starter_kit, :frame_ancestors, String.split(frame_ancestors)
 end
 
 if config_env() == :test do
