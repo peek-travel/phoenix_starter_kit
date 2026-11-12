@@ -92,6 +92,30 @@ defmodule PhoenixStarterKit.PartnersFixtures do
     Map.merge(struct, attrs)
   end
 
+  @doc """
+  Connects the partner user to the partner and returns a valid iframe
+  (embed) session token for them.
+  """
+  def embed_session_token_fixture(partner_user, partner) do
+    {:ok, _} = PhoenixStarterKit.Partners.connect_partner_user(partner, partner_user)
+    login_token = PhoenixStarterKit.Partners.generate_embed_login_token(partner_user, partner)
+    {:ok, embed_session_token} = PhoenixStarterKit.Partners.exchange_embed_login_token(login_token)
+    embed_session_token
+  end
+
+  @doc """
+  Moves the `inserted_at` of every token in the context back by the given
+  number of seconds.
+  """
+  def age_tokens(context, seconds) do
+    import Ecto.Query
+
+    PhoenixStarterKit.Repo.update_all(
+      from(t in PhoenixStarterKit.Partners.PartnerUserToken, where: t.context == ^context),
+      set: [inserted_at: DateTime.utc_now() |> DateTime.add(-seconds) |> DateTime.truncate(:second)]
+    )
+  end
+
   defp maybe_update_app_registry_installation(%{app_registry_installation: :installed} = attrs) do
     Map.replace!(attrs, :app_registry_installation, %{
       status: :installed,

@@ -42,14 +42,10 @@ defmodule PhoenixStarterKitWeb.PeekPro.EmbedsController do
     partner_user = PhoenixStarterKit.Partners.upsert_for_peek_account_user(current_partner, peek_account_user)
     locale = locale_from_peek_auth(conn)
 
-    auth_token =
-      Phoenix.Token.sign(PhoenixStarterKitWeb.Endpoint, "partner_auth", {
-        partner_user.id,
-        current_partner.id,
-        locale
-      })
+    login_token = PhoenixStarterKit.Partners.generate_embed_login_token(partner_user, current_partner)
+    query = if locale, do: [login_token: login_token, locale: locale], else: [login_token: login_token]
 
-    redirect(conn, to: ~p"/settings?auth_token=#{auth_token}")
+    redirect(conn, to: ~p"/settings?#{query}")
   end
 
   def landing(conn, _params) do
