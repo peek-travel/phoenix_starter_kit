@@ -219,4 +219,56 @@ defmodule PhoenixStarterKit.PartnersTest do
       assert Partners.get_partner_user_by_session_token(token) == nil
     end
   end
+
+  describe "embed tokens" do
+    setup do
+      partner = partner_fixture()
+      partner_user = partner_user_fixture()
+      %{partner: partner, partner_user: partner_user, token: embed_session_token_fixture(partner_user, partner)}
+    end
+
+    test "get_partner_user_by_embed_session_token/1 returns nil when the user left the partner of the token", %{
+      partner: partner,
+      partner_user: partner_user,
+      token: token
+    } do
+      {:ok, _} = Partners.connect_partner_user(partner_fixture(), partner_user)
+      Repo.delete_all(from c in PhoenixStarterKit.Partners.PartnerUserConnection, where: c.partner_id == ^partner.id)
+
+      assert Partners.get_partner_user_by_embed_session_token(token) == nil
+    end
+
+    test "get_partner_user_by_embed_session_token/1 returns nil for a token that is not valid base64" do
+      assert Partners.get_partner_user_by_embed_session_token("not base64!") == nil
+    end
+
+    test "delete_embed_session_token/1 returns :ok for a token that is not valid base64" do
+      assert Partners.delete_embed_session_token("not base64!") == :ok
+    end
+
+    test "generate_embed_login_token/2 deletes the expired embed tokens of the partner user only", %{
+      partner: partner,
+      partner_user: partner_user
+    } do
+      other_user = partner_user_fixture()
+      other_token = embed_session_token_fixture(other_user, partner)
+      _login_token = Partners.generate_embed_login_token(partner_user, partner)
+      age_tokens("embed_login", 61)
+      age_tokens("embed_session", 86_401)
+
+      fresh_login_token = Partners.generate_embed_login_token(partner_user, partner)
+
+      contexts =
+        Repo.all(from t in PartnerUserToken, where: t.partner_user_id == ^partner_user.id, select: t.context)
+
+      assert contexts == ["embed_login"]
+      assert {:ok, _} = Partners.exchange_embed_login_token(fresh_login_token)
+      assert Repo.exists?(from t in PartnerUserToken, where: t.partner_user_id == ^other_user.id)
+      assert Partners.embed_session_topic(other_token)
+    end
+
+    test "embed_session_topic/1 returns nil for a token that is not valid base64" do
+      assert Partners.embed_session_topic("not base64!") == nil
+    end
+  end
 end

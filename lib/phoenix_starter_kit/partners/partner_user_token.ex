@@ -13,6 +13,13 @@ defmodule PhoenixStarterKit.Partners.PartnerUserToken do
   @rand_size 32
   @session_validity_in_days 60
 
+  # Tokens for the Peek Pro iframe login. The DB keeps only a SHA-256 hash of
+  # each token. `sent_to` holds the ID of the partner that the token is for.
+  # The login token goes in the redirect URL and works one time only.
+  @embed_login_validity_in_seconds 60
+  @embed_session_validity_in_seconds 86_400
+  @embed_contexts ["embed_login", "embed_session"]
+
   schema "partner_users_tokens" do
     field :token, :binary
     field :context, :string
@@ -82,4 +89,61 @@ defmodule PhoenixStarterKit.Partners.PartnerUserToken do
     from t in PartnerUserToken,
       where: t.partner_user_id == ^partner_user.id and t.context in ^contexts
   end
+
+  @doc """
+  Builds an iframe login token (`"embed_login"`) or session token
+  (`"embed_session"`) for the partner user and the partner.
+
+  Returns the URL-safe token for the client and the row to insert.
+  """
+  def build_embed_token(partner_user_id, partner_id, context) when context in @embed_contexts do
+    token = :crypto.strong_rand_bytes(@rand_size)
+
+    {Base.url_encode64(token, padding: false),
+     %PartnerUserToken{token: hash(token), context: context, sent_to: partner_id, partner_user_id: partner_user_id}}
+  end
+
+  @doc """
+  Returns the query for the token row when the token is in its validity time,
+  or `:error` when the token is not a valid encoded token.
+  """
+  def verify_embed_token_query(encoded_token, context) when context in @embed_contexts do
+    with {:ok, hashed} <- decode_hash(encoded_token) do
+      {:ok, from(t in by_token_and_context_query(hashed, context), where: t.inserted_at > ago(^validity(context), "second"))}
+    end
+  end
+
+  @doc """
+  Returns the query for the embed token rows of the partner user that are
+  after their validity time.
+  """
+  def expired_embed_tokens_query(partner_user_id) do
+    expired =
+      Enum.reduce(@embed_contexts, false, fn context, expired ->
+        dynamic([t], ^expired or (t.context == ^context and t.inserted_at <= ago(^validity(context), "second")))
+      end)
+
+    from t in PartnerUserToken, where: t.partner_user_id == ^partner_user_id, where: ^expired
+  end
+
+  @doc """
+  Returns the query for all embed token rows of the partner.
+  """
+  def by_partner_embed_query(partner_id) do
+    from t in PartnerUserToken, where: t.sent_to == ^partner_id and t.context in @embed_contexts
+  end
+
+  @doc """
+  Returns the hash of an encoded embed token, or `:error` when it is not valid.
+  """
+  def decode_hash(encoded_token) when is_binary(encoded_token) do
+    with {:ok, token} <- Base.url_decode64(encoded_token, padding: false) do
+      {:ok, hash(token)}
+    end
+  end
+
+  defp hash(token), do: :crypto.hash(:sha256, token)
+
+  defp validity("embed_login"), do: @embed_login_validity_in_seconds
+  defp validity("embed_session"), do: @embed_session_validity_in_seconds
 end
