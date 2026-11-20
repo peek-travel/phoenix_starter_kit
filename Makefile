@@ -1,4 +1,4 @@
-.PHONY: all help setup deps fmt fmt-check lint test coverage compile ci
+.PHONY: all help setup deps audit fmt fmt-check lint test coverage compile ci
 
 MIX ?= mix
 
@@ -7,13 +7,17 @@ all:
 	$(MAKE) ci
 
 help:
-	@echo "Targets: setup, deps, fmt, fmt-check, lint, test, coverage, ci"
+	@echo "Targets: setup, deps, audit, fmt, fmt-check, lint, test, coverage, ci"
 
 setup:
 	$(MIX) setup
 
 deps:
 	$(MIX) deps.get
+
+# Fails when a locked package has a security advisory or is retired.
+audit:
+	$(MIX) hex.audit
 
 fmt:
 	$(MIX) format
@@ -35,6 +39,7 @@ compile:
 
 ci:
 	$(MAKE) deps
+	$(MAKE) audit
 	env MIX_ENV=test $(MIX) ecto.reset
 	$(MAKE) compile
 	$(MAKE) fmt-check

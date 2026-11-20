@@ -262,7 +262,8 @@ The `bin/` directory contains several useful scripts:
 - **`bin/dev`**: Sets up and runs a Cloudflare tunnel for development. Automatically creates `{app-name}-dev.peeklabs.com` tunnel.
 - **`bin/server`**: Starts the Phoenix server with IEx for development.
 - **`bin/dev-secrets`**: Writes `config/dev.secret.exs` with a random dev `secret_key_base` and LiveView signing salt when the file is missing. It keeps a file that exists.
-- **`make`**: Runs tests and code quality checks (format, lint, coverage).
+- **`make`**: Runs tests and code quality checks (dependency audit, format, lint, coverage).
+- **`make audit`**: Runs `mix hex.audit`. It fails when a locked package has a security advisory or is retired.
 - **`bin/sync`**: Syncs your app configuration with the Peek Pro registry.
 
 ## Git Hooks

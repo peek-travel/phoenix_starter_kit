@@ -58,6 +58,10 @@ jobs:
       - name: Install dependencies
         if: steps.deps_cache.outputs['cache-hit'] != 'true'
         run: mix deps.get
+      # Runs on every run, also on a deps cache hit: an advisory can be
+      # published for a package whose lock has not changed.
+      - name: Audit dependencies
+        run: make audit
       - name: Compile
         if: steps.build_cache.outputs['cache-hit'] != 'true'
         run: mix compile --warnings-as-errors

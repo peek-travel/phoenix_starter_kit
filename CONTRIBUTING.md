@@ -83,7 +83,10 @@ make fmt
 # Run static analysis
 make lint
 
-# Run all checks (format, credo, tests)
+# Check dependencies for security advisories and retired versions
+make audit
+
+# Run all checks (audit, format, credo, tests)
 make
 ```
 
