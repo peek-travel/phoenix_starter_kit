@@ -16,6 +16,7 @@ This is a **starter kit template** for building Elixir/Phoenix apps that integra
 - **Run a single test by line:** `mix test test/path/to_test.exs:42`
 - **Format code:** `make fmt`
 - **Lint:** `make lint`
+- **Audit dependencies (security advisories, retired versions):** `make audit` (runs `mix hex.audit`; also part of `make ci` and CI)
 - **Setup (deps + db + assets):** `make setup`
 - **Reset database:** `mix ecto.reset`
 - **Sync app manifest with registry:** `bin/sync`
