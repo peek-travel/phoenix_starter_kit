@@ -79,10 +79,10 @@ defmodule PhoenixStarterKitWeb.PeekPro.EmbedsControllerTest do
 
       conn = post(build_conn(), "/peek-pro/settings/?attempt=1", %{"attempt" => "1", "peek-auth" => token})
 
-      assert redirected_to(conn) =~ "/settings?auth_token="
+      assert redirected_to(conn) =~ "/settings?login_token="
     end
 
-    test "POST /peek-pro/settings/ with valid partner redirects with auth token", %{conn: conn} do
+    test "POST /peek-pro/settings/ with valid partner redirects with a login token", %{conn: conn} do
       # Create a partner first
       external_refid = "external-#{System.unique_integer()}"
       name = "Test Partner"
@@ -105,9 +105,9 @@ defmodule PhoenixStarterKitWeb.PeekPro.EmbedsControllerTest do
         |> assign(:peek_account_user, account_user)
         |> post(~p"/peek-pro/settings/")
 
-      # Should redirect to settings with an auth_token
+      # Should redirect to settings with a login token
       redirect_url = redirected_to(conn)
-      assert redirect_url =~ "/settings?auth_token="
+      assert redirect_url =~ "/settings?login_token="
 
       # Verify the partner user was created
       partner_user =
@@ -117,7 +117,7 @@ defmodule PhoenixStarterKitWeb.PeekPro.EmbedsControllerTest do
       assert partner_user != nil
     end
 
-    test "redirects with auth token regardless of browser (Safari, Chrome, etc)", %{conn: conn} do
+    test "redirects with a login token regardless of browser (Safari, Chrome, etc)", %{conn: conn} do
       partner = PhoenixStarterKit.PartnersFixtures.partner_fixture()
 
       account_user = %PeekAppSDK.AccountUser{
@@ -140,10 +140,10 @@ defmodule PhoenixStarterKitWeb.PeekPro.EmbedsControllerTest do
         })
 
       redirect_url = redirected_to(conn)
-      assert redirect_url =~ "/settings?auth_token="
+      assert redirect_url =~ "/settings?login_token="
     end
 
-    test "auth token in redirect is a valid Phoenix.Token containing locale", %{conn: conn} do
+    test "the login token in the redirect logs in the partner user one time, with no locale param", %{conn: conn} do
       partner = PhoenixStarterKit.PartnersFixtures.partner_fixture()
 
       account_user = %PeekAppSDK.AccountUser{
@@ -155,28 +155,23 @@ defmodule PhoenixStarterKitWeb.PeekPro.EmbedsControllerTest do
       }
 
       conn =
-        conn
-        |> put_req_header(
-          "user-agent",
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        )
-        |> post(~p"/peek-pro/settings", %{
+        post(conn, ~p"/peek-pro/settings", %{
           "peek-auth" => PeekAppSDK.Token.new_for_app_installation!(partner.app_registry_installation_refid, account_user)
         })
 
-      redirect_url = redirected_to(conn)
-      %URI{query: query} = URI.parse(redirect_url)
-      %{"auth_token" => token} = URI.decode_query(query)
+      %URI{query: query} = URI.parse(redirected_to(conn))
+      assert %{"login_token" => login_token} = params = URI.decode_query(query)
+      refute Map.has_key?(params, "locale")
 
-      assert {:ok, {partner_user_id, partner_id, locale}} =
-               Phoenix.Token.verify(PhoenixStarterKitWeb.Endpoint, "partner_auth", token, max_age: 86_400)
+      assert {:ok, embed_session_token} = PhoenixStarterKit.Partners.exchange_embed_login_token(login_token)
+      assert :error = PhoenixStarterKit.Partners.exchange_embed_login_token(login_token)
 
-      assert is_binary(partner_user_id)
-      assert partner_id == partner.id
-      assert is_nil(locale)
+      partner_user = PhoenixStarterKit.Partners.get_partner_user_by_embed_session_token(embed_session_token)
+      assert partner_user.email == "token.test@example.com"
+      assert partner_user.partner.id == partner.id
     end
 
-    test "auth token in redirect carries locale from peek-auth JWT", %{conn: conn} do
+    test "the redirect carries the locale from the peek-auth JWT", %{conn: conn} do
       partner = PhoenixStarterKit.PartnersFixtures.partner_fixture()
 
       account_user = %PeekAppSDK.AccountUser{
@@ -191,12 +186,8 @@ defmodule PhoenixStarterKitWeb.PeekPro.EmbedsControllerTest do
 
       conn = post(conn, ~p"/peek-pro/settings", %{"peek-auth" => locale_token})
 
-      redirect_url = redirected_to(conn)
-      %URI{query: query} = URI.parse(redirect_url)
-      %{"auth_token" => token} = URI.decode_query(query)
-
-      assert {:ok, {_partner_user_id, _partner_id, "es"}} =
-               Phoenix.Token.verify(PhoenixStarterKitWeb.Endpoint, "partner_auth", token, max_age: 86_400)
+      %URI{query: query} = URI.parse(redirected_to(conn))
+      assert %{"login_token" => _, "locale" => "es"} = URI.decode_query(query)
     end
   end
 

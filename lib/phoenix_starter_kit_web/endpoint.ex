@@ -73,7 +73,7 @@ defmodule PhoenixStarterKitWeb.Endpoint do
     pass: ["*/*"],
     json_decoder: Phoenix.json_library()
 
-  plug Sentry.PlugContext
+  plug Sentry.PlugContext, header_scrubber: {PhoenixStarterKitWeb.SentryScrubber, :scrub_headers}
   plug Plug.MethodOverride
   plug Plug.Head
   plug Plug.Session, @session_options

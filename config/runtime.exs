@@ -48,6 +48,18 @@ if config_env() == :dev do
   config :phoenix_starter_kit, embedded_app_url: env!("EMBEDDED_APP_URL", :string, nil)
 end
 
+# Optional: the hosts that can show the app in a frame, space-separated.
+# Example: FRAME_ANCESTORS="https://*.peek.com https://app.example.com"
+# In dev the value comes from .env (Dotenvy), else from the environment.
+frame_ancestors =
+  if config_env() == :dev,
+    do: Dotenvy.env!("FRAME_ANCESTORS", :string, nil),
+    else: System.get_env("FRAME_ANCESTORS")
+
+if frame_ancestors not in [nil, ""] do
+  config :phoenix_starter_kit, :frame_ancestors, String.split(frame_ancestors)
+end
+
 if config_env() == :test do
   import Dotenvy
   source!(".env.test")

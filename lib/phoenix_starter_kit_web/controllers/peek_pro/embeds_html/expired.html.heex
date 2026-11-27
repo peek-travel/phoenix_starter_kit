@@ -6,10 +6,16 @@
     <link phx-track-static rel="stylesheet" href={~p"/assets/css/app.css"} />
     <title>Session Expired</title>
     <script>
-      // Reload the parent window after a short delay
-      setTimeout(function() {
-        window.top.location.reload();
-      }, 1000);
+      // In an iframe, try to reload the parent window after a short delay. The
+      // parent then posts a new peek-auth token. A browser can refuse the reload
+      // of a parent on another origin; then the text below tells the user what to do.
+      if (window.top !== window.self) {
+        setTimeout(function() {
+          try {
+            window.top.location.reload();
+          } catch (_error) {}
+        }, 1000);
+      }
     </script>
   </head>
   <body class="bg-white">

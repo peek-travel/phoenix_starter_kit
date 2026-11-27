@@ -63,11 +63,17 @@ Provides health check and usage metrics:
    - No passwords required
    - Used for standalone access
 
-2. **Peek Pro Embedded Authentication** (`PeekAppSDK.Plugs.PeekAuth`)
+2. **Peek Pro Embedded Authentication** (`PeekAppSDK.Plugs.PeekAuth` + `PartnerUserAuth`)
    - JWT-based authentication from Peek Pro
    - Validates tokens from the Peek Pro platform
-   - Handles iframe embedding
-   - Safari compatibility workarounds
+   - The landing page redirects to `/settings?login_token=...`. The login token works one time, for 60 seconds
+   - `/settings` exchanges it for an embed session token: a row in `partner_users_tokens`, valid for 24 hours
+   - The LiveView gets the embed session token through its `phx-session`, so it works without third-party cookies (Safari)
+   - Logout and uninstall delete the embed session tokens and redirect the open LiveViews to `/`
+
+3. **Framing** (`PhoenixStarterKitWeb.Plugs.ContentSecurityPolicy`)
+   - Sets `content-security-policy: base-uri 'self'; frame-ancestors 'self' <hosts>` on the `:browser`, `:webhook`, `:install_webhook` and `:peek_pro_embed` pipelines
+   - The hosts come from `config :phoenix_starter_kit, :frame_ancestors`, or from the `FRAME_ANCESTORS` env var (space-separated)
 
 #### Pipelines
 
@@ -152,7 +158,8 @@ Provides health check and usage metrics:
 #### Data Protection
 
 - UUIDs for all primary keys (prevents enumeration)
-- Session tokens stored securely
+- Session tokens stored securely (embed login and session tokens as SHA-256 hashes)
+- Logs and Sentry events do not get token values: `:filter_parameters` and `PhoenixStarterKitWeb.SentryScrubber`
 - No password storage (email-based auth only)
 - Proper indexing for performance and security
 
